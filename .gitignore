@@ -1,0 +1,14 @@
+/cache/
+/out/
+
+/log/
+/.env
+/.env-*
+/.idea/
+package-lock.json
+/broadcast
+
+*secret*
+
+# This file is only used by DeployMock
+/liqp-deployments.json

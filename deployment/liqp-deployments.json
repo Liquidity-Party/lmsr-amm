@@ -1,0 +1,27 @@
+{
+  "1": {
+    "v1": {
+      "PartyPlanner": "0xE767bc5C2691F3ff49CE8E91A38469697A52d4cd",
+      "PartyInfo": "0x8416b8B4738Cd1C3a1B4027694337F92E45CF9F0",
+      "PartyPoolMintImpl": "0x30414cb83dC6C0C5908bBEC936903300D46bCd11",
+      "PartyPoolSwapImpl": "0x3EE915a112Dc3E8c6f0bd6406f9b06D67249d77E",
+      "PartyPoolInitCode": "0xA9DEe3537EE42Cb4717C017a07e9C20c43B1EBEd",
+      "PartyPoolBalancedPairInitCode": "0xfFfA495fFCFa45806AEAAC20Db92a8a83D5aF7C4"
+    }
+  },
+  "11155111": {
+    "v1": {
+      "PartyPlanner": "0x025819444cE9fF0D0ACb729f1a8fF4449b7B1C8A",
+      "PartyInfo": "0x8f98B899F4135408Fe03228cE942Ad6BF8E40f22",
+      "PartyPoolMintImpl": "0xB424B96B40b0E7918e5e8f3fE4406Db6Ca49e303",
+      "PartyPoolSwapImpl": "0xdfcBcB7C84f4581F3e117C941eE46799f172C68c",
+      "PartyPoolInitCode": "",
+      "PartyPoolBalancedPairInitCode": "",
+      "USXD": "0x8E4D16886b8946dfE463fA172129eaBf4825fb09",
+      "FUSD": "0xdc225280216822CA956738390f589c794129bd53",
+      "DIVE": "0x7ba123e4e7395A361284d069bD0D545F3f820641",
+      "BUTC": "0x88125947BBF1A6dd0FeD4B257BB3f9E1FBdCb3Cc",
+      "WTETH": "0xC8dB65C0B9f4cf59097d4C5Bcb9e8E92B9e4e15F"
+    }
+  }
+}
