@@ -1,0 +1,27 @@
+{
+  "1": {
+    "v1": {
+      "PartyPlanner": "0xd596879Bc4b99182D5BfC6633cC31b4A3852beDd",
+      "PartyInfo": "0x2B5b095AD6ca27C67dD8EE2852C00939D402766A",
+      "PartyPoolMintImpl": "0x4a2Ee4D520F8C1948361C026D27A37655f77d7cd",
+      "PartyPoolSwapImpl": "0x8685D023Ab0ae3a3c0AB7d65AC1FcA1EEa22172d",
+      "PartyPoolInitCodeHash": "0xF9f1A96162C235d12a697E372222D598952f9F7b",
+      "PartyPoolBalancedPairInitCodeHash": "0x871C0cfaAFEe2CECC0B2b4a2Ce621E08D4db0F54"
+    }
+  },
+  "11155111": {
+    "v1": {
+      "PartyPlanner": "0x5Fc0f6f7C81a5C87Bc7789199c99117af5dA6D3c",
+      "PartyInfo": "0x5B7a793070EE75f689FaA607B8C086Dc1489144D",
+      "PartyPoolMintImpl": "0xd35Aa52B44b27daE432733573316Fc7c031c0A49",
+      "PartyPoolSwapImpl": "0xdffD2b352C06575aB0f09f0b87AdFc45f347f6D6",
+      "PartyPoolInitCodeHash": "0xF9f1A96162C235d12a697E372222D598952f9F7b",
+      "PartyPoolBalancedPairInitCodeHash": "0x871C0cfaAFEe2CECC0B2b4a2Ce621E08D4db0F54",
+      "USXD": "0x8E4D16886b8946dfE463fA172129eaBf4825fb09",
+      "FUSD": "0xdc225280216822CA956738390f589c794129bd53",
+      "DIVE": "0x7ba123e4e7395A361284d069bD0D545F3f820641",
+      "BUTC": "0x88125947BBF1A6dd0FeD4B257BB3f9E1FBdCb3Cc",
+      "WTETH": "0xC8dB65C0B9f4cf59097d4C5Bcb9e8E92B9e4e15F"
+    }
+  }
+}

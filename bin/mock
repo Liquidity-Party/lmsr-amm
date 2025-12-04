@@ -1,0 +1,59 @@
+#!/bin/bash
+# Dev account #0
+#PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+# Dev account #4
+PRIVATE_KEY=0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a
+
+set -euo pipefail
+
+# Function to cleanup processes
+cleanup() {
+    if [[ -n "${ANVIL_PID:-}" ]] && kill -0 "$ANVIL_PID" 2>/dev/null; then
+        kill "$ANVIL_PID" 2>/dev/null || true
+        sleep 0.2
+        kill -9 "$ANVIL_PID" 2>/dev/null || true
+    fi
+}
+
+# Ensure cleanup on any exit
+trap cleanup EXIT
+# On Ctrl-C or TERM: exit immediately (will trigger EXIT trap -> cleanup)
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# Create log directory if it doesn't exist
+mkdir -p log
+
+# Run anvil in background and redirect output to log file
+# shellcheck disable=SC2086
+anvil --disable-block-gas-limit | tee log/anvil.txt &
+ANVIL_PID=$!
+
+# Function to check if string exists in file
+check_string() {
+    grep -q "$1" "$2"
+    return $?
+}
+
+# Wait for anvil to start (max 30 seconds)
+echo "Waiting for anvil to start..."
+counter=0
+while ! check_string "Listening on" "log/anvil.txt"; do
+    sleep 1
+    counter=$((counter + 1))
+    if [ $counter -ge 5 ]; then
+        echo "Timeout waiting for anvil to start"
+        exit 1
+    fi
+done
+
+forge script  --private-key ${PRIVATE_KEY} DeployMock --fork-url http://localhost:8545 --broadcast "$@" || exit 1
+
+if [ "${1:-}" = "slow" ]; then
+    echo "SLOW MODE: Setting mining mode to 12-second intervals."
+    cast rpc evm_setIntervalMining 12
+fi
+
+echo "Press Ctrl+C to exit..."
+# Wait for the anvil process; Ctrl-C will interrupt 'wait' and trigger cleanup via traps
+wait "$ANVIL_PID"

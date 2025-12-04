@@ -1,0 +1,137 @@
+#!/bin/bash
+
+CHAINID=1
+DEPLOY_SCRIPT=DeployEthereum
+
+if [ -f ".env-secret" ]; then
+  echo "Reading environment from .env-secret"
+  set -a
+  source .env-secret
+  set +a
+fi
+
+if [ -z "$ETHEREUM_RPC_URL" ]; then
+  echo "Usage: ETHEREUM_RPC_URL environment variable must be set"
+  exit 1
+fi
+RPC=${ETHEREUM_RPC_URL}
+
+if [ -z "$ETHERSCAN_API_KEY" ]; then
+  echo "Usage: ETHERSCAN_API_KEY environment variable must be set"
+  exit 1
+fi
+
+if [ "$1" == "broadcast" ]; then
+  # use the #0 account which is the admin
+  BROADCAST=(--broadcast --verify --etherscan-api-key "$ETHERSCAN_API_KEY")
+else
+  BROADCAST=()
+fi
+
+
+if [ "$1" != "record" ]; then
+  forge clean
+  echo 'Connect your Trezor to continue...'
+  TEMP_FILE=forge_script_tmp_output.txt
+  forge script --fork-url "$RPC" --trezor --mnemonic-indexes 0 --mnemonic-indexes 0 --slow "${BROADCAST[@]}" "$DEPLOY_SCRIPT" |& tee $TEMP_FILE
+  if [ "$1" == "broadcast" ]; then
+    # Etherscan fails to verify PartyPoolInitCode and PartyPoolBalancedPairInitCode since they are constructed with a
+    # single immutable and have no other code.
+    grep -q "Not all (4 / 6) contracts were verified!" $TEMP_FILE
+    SUCCESS=$?
+  else
+      SUCCESS=${PIPESTATUS[0]}
+  fi
+  rm $TEMP_FILE
+  if [ $SUCCESS -ne 0 ]; then
+    echo "Deployment failed."
+    exit 1
+  fi
+  echo "Deployment successful!"
+fi
+
+# Update the liqp-deployments.json file if the contracts were broadcast or record was requested
+
+if [ "$1" == "broadcast" ] || [ "$1" == "record" ]; then
+  METADATA_FILE=deployment/liqp-deployments.json
+  BROADCAST_FILE=broadcast/${DEPLOY_SCRIPT}.sol/${CHAINID}/run-latest.json
+else
+  METADATA_FILE=./liqp-deployments.json
+  BROADCAST_FILE=broadcast/${DEPLOY_SCRIPT}.sol/${CHAINID}/dry-run/run-latest.json
+fi
+
+address() {
+  if [ -z "$1" ]; then
+    echo ""
+  else
+    cast --to-checksum-address "$1"
+  fi
+}
+
+contract() {
+  address "$(jq -r ".transactions[] | select(.contractName == \"$1\" and .transactionType == \"CREATE\") | .contractAddress" $BROADCAST_FILE)"
+}
+
+contractByIndex() {
+  address "$(jq -r ".transactions[$1].contractAddress" $BROADCAST_FILE)"
+}
+
+
+if [ "$1" == "broadcast" ] || [ "$1" == "record" ]; then
+  PARTY_POOL_MINT_IMPL=$(contract PartyPoolMintImpl)
+  PARTY_POOL_SWAP_IMPL=$(contract PartyPoolSwapImpl)
+  PARTY_INFO=$(contract PartyInfo)
+  PARTY_POOL_INIT_CODE=$(contractByIndex 3)
+  PARTY_POOL_INIT_CODE_BP=$(contractByIndex 4)
+  PARTY_PLANNER=$(contract PartyPlanner)
+
+  OUT=deployment/$CHAINID/v1
+  git rm -rf $OUT > /dev/null 2>&1
+  mkdir -p $OUT
+  cp -r out $OUT/ > /dev/null 2>&1
+  git add $OUT/out > /dev/null 2>&1
+  echo Copied out to $OUT/
+
+  # Build and insert the JSON object directly in jq
+  jq -n \
+    --arg chainId "$CHAINID" \
+    --arg partyPlanner "$PARTY_PLANNER" \
+    --arg partyInfo "$PARTY_INFO" \
+    --arg partyPoolMintImpl "$PARTY_POOL_MINT_IMPL" \
+    --arg partyPoolSwapImpl "$PARTY_POOL_SWAP_IMPL" \
+    --arg partyPoolInitCode "$PARTY_POOL_INIT_CODE" \
+    --arg partyPoolInitCodeBP "$PARTY_POOL_INIT_CODE_BP" \
+    '
+    {
+      v1: {
+        PartyPlanner: $partyPlanner,
+        PartyInfo: $partyInfo,
+        PartyPoolMintImpl: $partyPoolMintImpl,
+        PartyPoolSwapImpl: $partyPoolSwapImpl,
+        PartyPoolInitCodeHash: $partyPoolInitCode,
+        PartyPoolBalancedPairInitCodeHash: $partyPoolInitCodeBP
+      }
+    } as $entry |
+    (try (input | . + {($chainId): $entry}) catch {($chainId): $entry})
+    ' "$METADATA_FILE" 2>/dev/null > "${METADATA_FILE}.tmp" && mv "${METADATA_FILE}.tmp" "$METADATA_FILE" || \
+    jq -n \
+      --arg chainId "$CHAINID" \
+      --arg partyPlanner "$PARTY_PLANNER" \
+      --arg partyInfo "$PARTY_INFO" \
+      --arg partyPoolMintImpl "$PARTY_POOL_MINT_IMPL" \
+      --arg partyPoolSwapImpl "$PARTY_POOL_SWAP_IMPL" \
+      --arg partyPoolInitCode "$PARTY_POOL_INIT_CODE" \
+      --arg partyPoolInitCodeBP "$PARTY_POOL_INIT_CODE_BP" \
+      '{($chainId): {
+        v1: {
+          PartyPlanner: $partyPlanner,
+          PartyInfo: $partyInfo,
+          PartyPoolMintImpl: $partyPoolMintImpl,
+          PartyPoolSwapImpl: $partyPoolSwapImpl,
+          PartyPoolInitCode: $partyPoolInitCode,
+          PartyPoolBalancedPairInitCode: $partyPoolInitCodeBP
+        }
+      }}' > "$METADATA_FILE"
+
+  echo "Wrote $METADATA_FILE"
+fi
