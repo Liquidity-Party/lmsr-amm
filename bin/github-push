@@ -1,0 +1,18 @@
+#!/bin/bash
+# Create an orphan branch that has no parents
+git checkout --orphan temp-prune-branch
+
+# Stage all current files
+git add -A
+
+# Create a single new root commit
+git commit -m "Liquidity Party"
+
+# Delete old main branch name and rename this new branch to main
+git branch -D main
+git branch -m main
+
+git reflog expire --expire=now --all
+git gc --prune=now --aggressive
+
+git push --force github main

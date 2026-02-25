@@ -1,0 +1,31 @@
+#!/bin/bash
+
+report() {
+  local name=${2:-$1}
+  REPORT=$(forge test --mc GasTest --mt "$1" --gas-report)
+  SWAP=$(echo "$REPORT" | grep 'swapApproval ' | cut -d '|' -f 5 | xargs)
+  if [ -z "$SWAP" ]; then
+    SWAP=$(echo "$REPORT" | grep 'swapPrefund ' | cut -d '|' -f 5 | xargs)
+  fi
+  if [ -z "$SWAP" ]; then
+    SWAP=$(echo "$REPORT" | grep 'swapCallback ' | cut -d '|' -f 5 | xargs)
+  fi
+  MINT=$(echo "$REPORT" | grep 'mint ' | cut -d '|' -f 5 | xargs)
+  SWAPMINT=$(echo "$REPORT" | grep 'swapMint ' | cut -d '|' -f 5 | xargs)
+  printf "%-15s %10s %10s %10s\n" "$name" "$SWAP" "$MINT" "$SWAPMINT"
+}
+
+# Print header
+printf "%-15s %10s %10s %10s\n" "" "swap" "mint" "swapMint"
+printf "%s\n" "                    ------  ---------  ---------"
+
+report GasPair Pair
+report StablePair "Stable Pair"
+report PrefundingSP "SPair prefund"
+report Ten
+report Prefunding10 "Ten prefund"
+report Callback10 "Ten callback"
+report Twenty
+report Prefunding20 "Twenty prefund"
+report Callback20 "Twenty callback"
+report Fifty

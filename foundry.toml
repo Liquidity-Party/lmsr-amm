@@ -1,0 +1,22 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+remappings = [
+    '@openzeppelin/=lib/openzeppelin-contracts/',
+    '@abdk/=lib/abdk-libraries-solidity/',
+]
+optimizer=true
+optimizer_runs=100000000 # maximum value allowed by etherscan's verifier XD. The max value is formally 2^32-1
+viaIR=true
+#gas_reports = ['PartyPool', 'PartyPoolBalancedPair', 'PartyPlanner', 'PartyPoolSwapImpl', 'PartyPoolMintImpl',]
+gas_reports = ['PartyPool', 'PartyPoolBalancedPair', 'PartyPlanner', 'GasHarness']
+fs_permissions = [
+    { access = "write", path = "liqp-deployments.json"}, # used for mockchain
+    { access = "read", path = "deployment/liqp-deployments.json"}, # production deployments
+]
+
+[lint]
+lint_on_build=false  # more annoying than helpful
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

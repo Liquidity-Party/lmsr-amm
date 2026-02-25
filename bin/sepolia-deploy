@@ -1,0 +1,154 @@
+#!/bin/bash
+
+CHAINID=11155111
+DEPLOY_SCRIPT=DeploySepolia
+
+if [ -f ".env-secret" ]; then
+  echo "Reading environment from .env-secret"
+  set -a
+  source .env-secret
+  set +a
+fi
+
+if [ -z "$SEPOLIA_RPC_URL" ]; then
+  echo "Usage: SEPOLIA_RPC_URL environment variable must be set"
+  exit 1
+fi
+RPC=${SEPOLIA_RPC_URL}
+
+if [ -z "$PRIVATE_KEY" ]; then
+  echo "Usage: PRIVATE_KEY environment variable must be set"
+  exit 1
+fi
+
+if [ -z "$ETHERSCAN_API_KEY" ]; then
+  echo "Usage: ETHERSCAN_API_KEY environment variable must be set"
+  exit 1
+fi
+
+if [ "$1" == "broadcast" ]; then
+  # BROADCAST=(--broadcast --verify --etherscan-api-key "$ETHERSCAN_API_KEY")
+  # use --slow to avoid triggering rate limits
+  BROADCAST=(--slow --broadcast --verify --etherscan-api-key "$ETHERSCAN_API_KEY")
+else
+  BROADCAST=()
+fi
+
+
+if [ "$1" != "record" ]; then
+  forge clean
+  forge script --fork-url "$RPC" --private-key "$PRIVATE_KEY" "${BROADCAST[@]}" script/DeploySepolia.sol || exit 1
+fi
+
+# Update the liqp-deployments.json file if the contracts were broadcast or record was requested
+
+if [ "$1" == "broadcast" ] || [ "$1" == "record" ]; then
+  METADATA_FILE=deployment/liqp-deployments.json
+else
+  METADATA_FILE=./liqp-deployments.json
+fi
+
+address() {
+  if [ -z "$1" ]; then
+    echo ""
+  else
+    cast --to-checksum-address "$1"
+  fi
+}
+
+contract() {
+  address "$(jq -r ".transactions[] | select(.contractName == \"$1\" and .transactionType == \"CREATE\") | .contractAddress" broadcast/${DEPLOY_SCRIPT}.sol/${CHAINID}/run-latest.json)"
+}
+
+token() {
+  local addr
+  addr=$(address "$(jq -r ".transactions[] | select(.contractName == \"MockERC20\" and .transactionType == \"CREATE\" and (.arguments | contains([\"$1\"]))) | .contractAddress" broadcast/${DEPLOY_SCRIPT}.sol/${CHAINID}/run-latest.json)")
+  if [ -z "$addr" ]; then
+    addr=$(jq -r ".[\"${CHAINID}\"].v1[\"$1\"]" ./deployment/liqp-deployments.json)
+  fi
+  echo "$addr"
+}
+
+if [ "$1" == "broadcast" ] || [ "$1" == "record" ]; then
+  PARTY_PLANNER=$(contract PartyPlanner)
+  PARTY_INFO=$(contract PartyInfo)
+  PARTY_POOL_MINT_IMPL=$(contract PartyPoolMintImpl)
+  PARTY_POOL_SWAP_IMPL=$(contract PartyPoolSwapImpl)
+  PARTY_POOL_INIT_CODE=$(contract PartyPoolInitCode)
+  PARTY_POOL_INIT_CODE_BP=$(contract PartyPoolBalancedPairInitCode)
+
+  USXD=$(token USXD)
+  FUSD=$(token FUSD)
+  DIVE=$(token DIVE)
+  BUTC=$(token BUTC)
+  WTETH=$(token WTETH)
+
+  OUT=deployment/$CHAINID/v1
+  git rm -rf $OUT > /dev/null 2>&1
+  mkdir -p $OUT
+  cp -r out $OUT/ > /dev/null 2>&1
+  git add $OUT/out > /dev/null 2>&1
+
+  # Build and insert the JSON object directly in jq
+  jq -n \
+    --arg chainId "$CHAINID" \
+    --arg partyPlanner "$PARTY_PLANNER" \
+    --arg partyInfo "$PARTY_INFO" \
+    --arg partyPoolMintImpl "$PARTY_POOL_MINT_IMPL" \
+    --arg partyPoolSwapImpl "$PARTY_POOL_SWAP_IMPL" \
+    --arg partyPoolInitCode "$PARTY_POOL_INIT_CODE" \
+    --arg partyPoolInitCodeBP "$PARTY_POOL_INIT_CODE_BP" \
+    --arg usxd "$USXD" \
+    --arg fusd "$FUSD" \
+    --arg dive "$DIVE" \
+    --arg butc "$BUTC" \
+    --arg wteth "$WTETH" \
+    '
+    {
+      v1: {
+        PartyPlanner: $partyPlanner,
+        PartyInfo: $partyInfo,
+        PartyPoolMintImpl: $partyPoolMintImpl,
+        PartyPoolSwapImpl: $partyPoolSwapImpl,
+        PartyPoolInitCodeHash: $partyPoolInitCode,
+        PartyPoolBalancedPairInitCodeHash: $partyPoolInitCodeBP,
+        USXD: $usxd,
+        FUSD: $fusd,
+        DIVE: $dive,
+        BUTC: $butc,
+        WTETH: $wteth
+      }
+    } as $entry |
+    (try (input | . + {($chainId): $entry}) catch {($chainId): $entry})
+    ' "$METADATA_FILE" 2>/dev/null > "${METADATA_FILE}.tmp" && mv "${METADATA_FILE}.tmp" "$METADATA_FILE" || \
+    jq -n \
+      --arg chainId "$CHAINID" \
+      --arg partyPlanner "$PARTY_PLANNER" \
+      --arg partyInfo "$PARTY_INFO" \
+      --arg partyPoolMintImpl "$PARTY_POOL_MINT_IMPL" \
+      --arg partyPoolSwapImpl "$PARTY_POOL_SWAP_IMPL" \
+      --arg partyPoolInitCode "$PARTY_POOL_INIT_CODE" \
+      --arg partyPoolInitCodeBP "$PARTY_POOL_INIT_CODE_BP" \
+      --arg usxd "$USXD" \
+      --arg fusd "$FUSD" \
+      --arg dive "$DIVE" \
+      --arg butc "$BUTC" \
+      --arg wteth "$WTETH" \
+      '{($chainId): {
+        v1: {
+          PartyPlanner: $partyPlanner,
+          PartyInfo: $partyInfo,
+          PartyPoolMintImpl: $partyPoolMintImpl,
+          PartyPoolSwapImpl: $partyPoolSwapImpl,
+          PartyPoolInitCode: $partyPoolInitCode,
+          PartyPoolBalancedPairInitCode: $partyPoolInitCodeBP,
+          USXD: $usxd,
+          FUSD: $fusd,
+          DIVE: $dive,
+          BUTC: $butc,
+          WTETH: $wteth
+        }
+      }}' > "$METADATA_FILE"
+
+  echo "Wrote $METADATA_FILE"
+fi
