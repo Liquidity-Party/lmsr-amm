@@ -1,0 +1,13 @@
+{
+  "1": {
+    "v1": {
+      "PartyPlanner": "0xe6C22aA3e1B3e11AA6C1C6E3086883b3C5071071",
+      "PartyInfo": "0x5f1B901f2955CAD0B28978eF6f0D3054C102F244",
+      "PartyPoolMintImpl": "0xDF2535B88D97Bf52649D87D41986e4C5B7aB60f5",
+      "PartyPoolExtraImpl": "0x5f34B189ca58EeC3B6c1Ac432f3D5F85058ACbf7",
+      "PartyPoolInitCode": "0xa34fecacb2DFEbe06Ba98157eCb00ca63122C72E",
+      "PartyPoolBalancedPairInitCode": "0xe6C22aA3e1B3e11AA6C1C6E3086883b3C5071071",
+      "PartyConcierge": "0x84b6328ed700053dF56C05EAE7Eb5e5f3abcD4cB"
+    }
+  }
+}

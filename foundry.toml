@@ -1,0 +1,22 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+remappings = [
+    '@openzeppelin/=lib/openzeppelin-contracts/',
+    '@abdk/=lib/abdk-libraries-solidity/',
+    'solmate/=lib/permit2/lib/solmate/',
+    'permit2/=lib/permit2/src/',
+]
+optimizer=true
+optimizer_runs=100000000 # maximum value allowed by Etherscan's verifier XD. The max value is formally 2^32-1
+viaIR=true
+gas_reports = ['PartyPool', 'PartyPoolBalancedPair', 'PartyPlanner', 'GasHarness', 'PartyConcierge']
+fs_permissions = [
+    { access = "write", path = "liqp-deployments.json"}, # used for mockchain
+    { access = "read", path = "deployment/liqp-deployments.json"}, # production deployments
+    { access = "read", path = "out/"}, # for vm.etch of compiled contracts in tests
+]
+
+[lint]
+lint_on_build=false  # more annoying than helpful

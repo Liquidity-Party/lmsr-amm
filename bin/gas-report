@@ -1,0 +1,71 @@
+#!/bin/bash
+
+# Ensure Permit2.sol artifact exists (needed by GasTest setUp)
+forge build --quiet
+
+report() {
+  local name=${2:-$1}
+  REPORT=$(forge test --mc GasTest --mt "$1" --gas-report)
+  SWAP=$(echo "$REPORT" | grep 'swapApproval ' | cut -d '|' -f 5 | xargs)
+  if [ -z "$SWAP" ]; then
+    SWAP=$(echo "$REPORT" | grep 'swapPrefund ' | cut -d '|' -f 5 | xargs)
+  fi
+  if [ -z "$SWAP" ]; then
+    SWAP=$(echo "$REPORT" | grep 'swapCallback ' | cut -d '|' -f 5 | xargs)
+  fi
+  if [ -z "$SWAP" ]; then
+    SWAP=$(echo "$REPORT" | grep 'swapPermit2 ' | cut -d '|' -f 5 | xargs)
+  fi
+  MINT=$(echo "$REPORT" | grep 'mint ' | cut -d '|' -f 5 | xargs)
+  SWAPMINT=$(echo "$REPORT" | grep 'swapMint ' | cut -d '|' -f 5 | xargs)
+  printf "%-15s %10s %10s %10s\n" "$name" "$SWAP" "$MINT" "$SWAPMINT"
+}
+
+# Extract median gas for a named function within the PartyConcierge contract block
+concierge_median() {
+  local report="$1" fn="$2"
+  echo "$report" | awk -v fn="$fn" '
+    /PartyConcierge [Cc]ontract/ { in_block=1; next }
+    in_block && / [Cc]ontract /  { in_block=0 }
+    in_block && $0 ~ ("\\| " fn " ") {
+      n = split($0, a, "|")
+      gsub(/ /, "", a[5])
+      print a[5]
+      exit
+    }
+  '
+}
+
+reportConcierge() {
+  local name=${2:-$1}
+  local RESULT
+  RESULT=$(forge test --mc ConciergeBenchTest --mt "$1" --gas-report 2>/dev/null)
+  SWAP=$(concierge_median "$RESULT" "swap")
+  MINT=$(concierge_median "$RESULT" "mint")
+  SWAPMINT=$(concierge_median "$RESULT" "swapMint")
+  printf "%-15s %10s %10s %10s\n" "$name" "$SWAP" "$MINT" "$SWAPMINT"
+}
+
+# Print header
+printf "%-15s %10s %10s %10s\n" "" "swap" "mint" "swapMint"
+printf "%s\n" "                    ------  ---------  ---------"
+
+report GasPair Pair
+report StablePair "Stable Pair"
+report PrefundingSP "SPair prefund"
+report Ten
+report Prefunding10 "Ten prefund"
+report Callback10 "Ten callback"
+report Permit210 "Ten Permit2"
+report Twenty
+report Prefunding20 "Twenty prefund"
+report Callback20 "Twenty callback"
+report Permit220 "Twenty Permit2"
+report Fifty
+
+echo ""
+printf "%-15s %10s %10s %10s\n" "" "swap" "mint" "swapMint"
+printf "%s\n" "                    ------  ---------  ---------"
+reportConcierge testConciergePair   "Conc Pair"
+reportConcierge testConciergeTen    "Conc Ten"
+reportConcierge testConciergeTwenty "Conc Twenty"

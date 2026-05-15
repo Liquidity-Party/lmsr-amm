@@ -1,0 +1,20 @@
+/cache/
+/out/
+/internal
+/log/
+/.env
+/.env-*
+/.idea/
+package-lock.json
+/broadcast
+.validate-cache
+
+*secret*
+
+# This file is only used by DeployMock
+/liqp-deployments.json
+
+# Temporary security reference catalogs (shallow clones, regenerated per review cycle)
+/security/references/
+.claude
+.gas-snapshot
