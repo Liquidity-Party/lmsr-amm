@@ -316,7 +316,9 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
 
         for (uint256 iter = 0; iter < 256; ) {
             (bool ok, uint256 ai, uint256 fee) = _quote(inputTokenIndex, lpHi, feePpm, lmsr, bases_, supply);
-            uint256 totalIn = ok ? ai + fee : 0;
+            // `ai` from swapMintAmounts is already fee-inclusive (net + fee), matching swapMint's
+            // own `amountInUsed + inFee <= maxAmountIn` check. Adding `fee` here would double-count.
+            uint256 totalIn = ok ? ai : 0;
             if (ok && totalIn <= maxAmountIn) {
                 lpLo = lpHi;
                 amountInUsed = ai;
@@ -339,7 +341,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
             if (lpHi - lpLo <= 1) break;
             uint256 mid = lpLo + (lpHi - lpLo) / 2;
             (bool ok, uint256 ai, uint256 fee) = _quote(inputTokenIndex, mid, feePpm, lmsr, bases_, supply);
-            uint256 totalIn = ok ? ai + fee : 0;
+            uint256 totalIn = ok ? ai : 0;
             if (ok && totalIn <= maxAmountIn) {
                 lpLo = mid;
                 amountInUsed = ai;

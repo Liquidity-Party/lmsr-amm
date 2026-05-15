@@ -162,7 +162,10 @@ contract FeeGapQuoteAccuracyTest is Test {
         console.log("maxLpForBudget quotedFee: ", quotedFee);
 
         assertGt(lpOut, 0, "should find feasible LP");
-        assertLe(quotedIn + quotedFee, budget, "quoted total must fit budget");
+        // quotedIn from swapMintAmounts is already fee-inclusive (net + fee);
+        // it is the value swapMint compares against maxAmountIn.
+        quotedFee; // unused: retained in the return to document the destructuring
+        assertLe(quotedIn, budget, "quoted total must fit budget");
 
         // Execute to confirm quoted amounts are achievable
         vm.startPrank(actor);
