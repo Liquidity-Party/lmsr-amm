@@ -1,8 +1,8 @@
 # Loss-Versus-Rebalancing Reduced in Cross-Correlated Multi-Asset LMSR Pools
 
-Tim Olson v1.53 &lt;timolsoncrypto@gmail.com&gt; · Claude Opus 4.7
+Tim Olson &lt;timolsoncrypto@gmail.com&gt; · Claude Opus 4.7
 
-**Abstract.** We derive in closed form the instantaneous loss-versus-rebalancing (LVR) rate for the multi-asset Hanson LMSR with $N$ risky assets, one numéraire, and an arbitrary positive semi-definite return-covariance matrix $\Sigma$, under the standard idealized assumption of frictionless continuous arbitrage. The rate decomposes as the sum of the LVR rates of $N$ independent two-asset LMSR pools minus a non-negative _cross-correlation discount_ of closed form $\tfrac{b}{2(1+S)}\,P^{\!\top}\!\Sigma P$, where $S$ is the total risky value held by the pool. Equivalently, the rate splits orthogonally into an idiosyncratic relative-mode variance term plus a single basket-vs-numéraire common-mode term, making the simplex's role as a covariance projector for coherent basket motion explicit. For perfectly correlated equal-volatility assets the discount cancels the entire relative-mode contribution: an $(N{+}1)$-asset balanced pool has the same LVR rate as a two-asset LMSR with matched liquidity parameter $b$ and matched risky notional $S$, and a no-numéraire pool of perfectly correlated assets has zero LVR. The discount has no analog in _separable_ bilateral CFMMs of any local curvature: it descends from the off-diagonal simplex-coupling term in $\nabla^2 V$ induced by the shared constraint $\sum p_i = 1$, and off-diagonal Hessian structure is necessary (though we do not establish it sufficient) for any discount of this form.
+**Abstract.** We derive in closed form the instantaneous loss-versus-rebalancing (LVR) rate for the multi-asset Hanson LMSR with $N$ risky assets, one numéraire, and an arbitrary positive semi-definite return-covariance matrix $\Sigma$, under the standard idealized assumption of frictionless continuous arbitrage. The rate decomposes as the sum of the LVR rates of $N$ independent two-asset LMSR pools minus a non-negative _cross-correlation discount_ of closed form $\tfrac{b}{2(1+S)} P^{\!\top}\!\Sigma P$, where $S$ is the total risky value held by the pool. Equivalently, the rate splits orthogonally into an idiosyncratic relative-mode variance term plus a single basket-vs-numéraire common-mode term, making the simplex's role as a covariance projector for coherent basket motion explicit. For perfectly correlated equal-volatility assets the discount cancels the entire relative-mode contribution: an $(N{+}1)$-asset balanced pool has the same LVR rate as a two-asset LMSR with matched liquidity parameter $b$ and matched risky notional $S$, and a no-numéraire pool of perfectly correlated assets has zero LVR. The discount has no analog in _separable_ bilateral CFMMs of any local curvature: it descends from the off-diagonal simplex-coupling term in $\nabla^2 V$ induced by the shared constraint $\sum p_i = 1$, and off-diagonal Hessian structure is necessary (though we do not establish it sufficient) for any discount of this form.
 
 ---
 
@@ -10,9 +10,9 @@ Tim Olson v1.53 &lt;timolsoncrypto@gmail.com&gt; · Claude Opus 4.7
 
 Milionis, Moallemi, Roughgarden, and Zhang (2022, 2024) introduced the _loss-versus-rebalancing_ (LVR) metric to quantify the rate at which a constant-function market maker (CFMM) bleeds value to arbitrageurs in the presence of a frictionless external reference market. Their value-function methodology applies to any CFMM whose pool value $V(P)$ is a $C^2$ concave function of the external price vector $P$: under idealized continuous arbitrage and an Itô price process with log-return covariance matrix $\Sigma$, the instantaneous LVR rate is
 
-$$\ell(P) \;=\; -\tfrac{1}{2}\sum_{i,j} P_i P_j \,\Sigma_{ij}\, \frac{\partial^2 V}{\partial P_i\,\partial P_j}. \tag{0}$$
+$$\ell(P)  =  -\tfrac{1}{2}\sum_{i,j} P_i P_j  \Sigma_{ij}  \frac{\partial^2 V}{\partial P_i \partial P_j}. \tag{0}$$
 
-For the canonical two-asset constant-product AMM with single-asset log-return volatility $\sigma$, the rate evaluates to $\ell = (\sigma^2/8)\,V$.
+For the canonical two-asset constant-product AMM with single-asset log-return volatility $\sigma$, the rate evaluates to $\ell = (\sigma^2/8) V$.
 
 Throughout this paper we adopt the same idealization: continuous, frictionless, infinitesimal arbitrage at every instant. Real systems incur latency, gas, discrete trade sizes, and finite arbitrage cadence; the rate $\ell(P)$ should accordingly be read as an _instantaneous, infinitesimal-arbitrage benchmark_ rather than a quantity directly observable in deployed pools. The benchmark is nevertheless useful because it cleanly isolates the effect of pool geometry on adverse selection by arbitrageurs; fee and discretization corrections enter multiplicatively as in Milionis et al. (2024) and preserve the geometric structure derived here.
 
@@ -20,9 +20,9 @@ The Logarithmic Market Scoring Rule (LMSR) of Hanson (2003, 2007) is the canonic
 
 We show that this propagation has a quantitatively precise consequence for LVR. Our main result, eq. $(\dagger)$ in §5, is
 
-$$\ell(P) \;=\; \underbrace{\frac{b}{2}\sum_{i=1}^N \sigma_i^2 P_i}_{\text{sum of $N$ two-asset LMSR rates}} \;-\; \underbrace{\frac{b}{2(1+S)}\,P^{\!\top}\!\Sigma P}_{\text{cross-correlation discount}}, \qquad S \equiv \sum_{i=1}^N P_i.$$
+$$\ell(P)  =  \underbrace{\frac{b}{2}\sum_{i=1}^N \sigma_i^2 P_i}_{\text{sum of $N$ two-asset LMSR rates}}  -  \underbrace{\frac{b}{2(1+S)} P^{\!\top}\!\Sigma P}_{\text{cross-correlation discount}}, \qquad S \equiv \sum_{i=1}^N P_i.$$
 
-The discount is non-negative for any PSD $\Sigma$ and grows with the variance of the value-weighted basket return. In §5 we show that this rewrites as a clean common-mode/relative-mode split (Theorem 5.4): the LVR rate equals a relative-mode piece $\tfrac{b}{2}\sum_i P_i\,\mathrm{Var}(r_i - \bar r)$ plus a single common-mode piece $\tfrac{bS}{2(1+S)}\,\mathrm{Var}(\bar r)$, where $\bar r$ is the value-weighted basket return. For perfectly correlated equal-volatility assets, the relative-mode piece vanishes and only the common-mode-versus-numéraire term remains, collapsing the multi-asset LVR to that of a single synthetic two-asset pool. In a pool with no numéraire, both the common-mode arbitrage channel and the relative-mode contribution can vanish simultaneously, and perfect correlation drives LVR to exactly zero.
+The discount is non-negative for any PSD $\Sigma$ and grows with the variance of the value-weighted basket return. In §5 we show that this rewrites as a clean common-mode/relative-mode split (Theorem 5.4): the LVR rate equals a relative-mode piece $\tfrac{b}{2}\sum_i P_i \mathrm{Var}(r_i - \bar r)$ plus a single common-mode piece $\tfrac{bS}{2(1+S)} \mathrm{Var}(\bar r)$, where $\bar r$ is the value-weighted basket return. For perfectly correlated equal-volatility assets, the relative-mode piece vanishes and only the common-mode-versus-numéraire term remains, collapsing the multi-asset LVR to that of a single synthetic two-asset pool. In a pool with no numéraire, both the common-mode arbitrage channel and the relative-mode contribution can vanish simultaneously, and perfect correlation drives LVR to exactly zero.
 
 The cross-correlation discount is structural in a precise sense: it descends from the off-diagonal simplex-coupling term in $V$'s Hessian (eq. (6) in §4) induced by the constraint $\sum p_i = 1$. By Proposition 5.5, any _separable_ bilateral CFMM — one whose pool value decomposes as $V(P) = \sum_i V_i(P_i)$ — has a diagonal Hessian and therefore cannot exhibit a covariance-canceling term of this form. Equivalently, off-diagonal Hessian structure is _necessary_ for a discount of this form. We do not claim, and our analysis does not establish, that non-LMSR multi-asset CFMM constructions (entropic, CES-like, weighted-softmax, or otherwise) cannot exhibit analogous off-diagonal couplings or that the LMSR is unique in admitting such a discount; characterizing the full class of multi-asset CFMMs that do is a separate question we do not undertake here.
 
@@ -36,33 +36,33 @@ The remainder of the paper is organized as follows. §2 fixes notation in Hanson
 
 We work in continuous time with $N+1$ assets: a numéraire (asset $0$) with constant price $P_0 \equiv 1$, and $N$ risky assets with strictly positive prices $P = (P_1, \dots, P_N) \in \mathbb{R}^N_{>0}$ following correlated geometric Brownian motion,
 
-$$d\log P_i \;=\; \mu_i \, dt \;+\; \sum_{k=1}^N \Sigma^{1/2}_{ik}\, dW^{(k)}_t, \qquad \langle d\log P_i,\, d\log P_j \rangle \;=\; \Sigma_{ij}\, dt,$$
+$$d\log P_i  =  \mu_i   dt  +  \sum_{k=1}^N \Sigma^{1/2}_{ik}  dW^{(k)}_t, \qquad \langle d\log P_i,  d\log P_j \rangle  =  \Sigma_{ij}  dt,$$
 
 with $\Sigma \in \mathbb{R}^{N\times N}$ symmetric positive semi-definite. We write $\Sigma_{ij} = \rho_{ij}\sigma_i \sigma_j$, so $\Sigma_{ii} = \sigma_i^2$. Throughout, $r_i \equiv d\log P_i$ denotes the instantaneous log return of asset $i$.
 
 **Cost function.** The Hanson LMSR cost function on state $q = (q_0, q_1, \dots, q_N) \in \mathbb{R}^{N+1}$ is
 
-$$C(q) \;=\; b \log \sum_{i=0}^N \exp(q_i/b), \qquad b > 0.$$
+$$C(q)  =  b \log \sum_{i=0}^N \exp(q_i/b), \qquad b > 0.$$
 
 Following Hanson's shares-outstanding convention (as adopted by Milionis et al.), $q_i$ is the cumulative quantity of asset $i$ the market maker has sold to traders; the MM is short $q_i$ of asset $i$. The marginal simplex price of asset $i$ is
 
-$$p_i(q) \;=\; \frac{\partial C}{\partial q_i} \;=\; \frac{e^{q_i/b}}{\sum_k e^{q_k/b}}, \qquad \sum_{i=0}^N p_i \;=\; 1.$$
+$$p_i(q)  =  \frac{\partial C}{\partial q_i}  =  \frac{e^{q_i/b}}{\sum_k e^{q_k/b}}, \qquad \sum_{i=0}^N p_i  =  1.$$
 
-Trading from state $q$ to $q + dq$ collects cash $dC = \sum_i p_i\, dq_i$. Over a finite history from initial state $q^{(0)}$, the MM holds cash $C(q) - C(q^{(0)})$ and is short $q_i$ of each asset.
+Trading from state $q$ to $q + dq$ collects cash $dC = \sum_i p_i  dq_i$. Over a finite history from initial state $q^{(0)}$, the MM holds cash $C(q) - C(q^{(0)})$ and is short $q_i$ of each asset.
 
 **Net pool value.** At external prices $P = (1, P_1, \dots, P_N)$, the MM's mark-to-market is
 
-$$V(q; P) \;=\; \bigl[C(q) - C(q^{(0)})\bigr] \;-\; \sum_{i=0}^N q_i P_i. \tag{1}$$
+$$V(q; P)  =  \bigl[C(q) - C(q^{(0)})\bigr]  -  \sum_{i=0}^N q_i P_i. \tag{1}$$
 
 The constant $-C(q^{(0)})$ does not depend on $P$ and drops from $\nabla^2 V$ and from the LVR rate; we omit it throughout.
 
 **Continuous arbitrage equilibrium.** We assume frictionless continuous arbitrage: at every instant the pool's marginal prices match the external prices, so $p_i(q)/p_0(q) = P_i/1$. Combined with $\sum_i p_i = 1$,
 
-$$p_0(q^\star) \;=\; \frac{1}{1+S}, \qquad p_i(q^\star) \;=\; \frac{P_i}{1+S} \quad (i \ge 1), \qquad S \equiv \sum_{i=1}^N P_i. \tag{2}$$
+$$p_0(q^\star)  =  \frac{1}{1+S}, \qquad p_i(q^\star)  =  \frac{P_i}{1+S} \quad (i \ge 1), \qquad S \equiv \sum_{i=1}^N P_i. \tag{2}$$
 
 **Coordinate redundancy.** The simplex prices $p_i(q)$ are invariant under the shift $q \to q + c\mathbf{1}$ (softmax translation invariance), so $q^\star$ is determined only up to an additive constant. We fix it by imposing $C(q^\star) = C_0$, giving $q_i^\star = C_0 + b\log p_i$ and, substituting (2),
 
-$$q_0^\star(P) \;=\; C_0 - b\log(1+S), \qquad q_i^\star(P) \;=\; C_0 + b\log\!\frac{P_i}{1+S} \quad (i \ge 1). \tag{3}$$
+$$q_0^\star(P)  =  C_0 - b\log(1+S), \qquad q_i^\star(P)  =  C_0 + b\log\!\frac{P_i}{1+S} \quad (i \ge 1). \tag{3}$$
 
 Using $C(q + c\mathbf{1}) = c + C(q)$, a one-line check shows that the choice of $C_0$ shifts $V$ by the $P$-linear amount $-C_0 S$ and is therefore immaterial for $\nabla^2_P V$ and the LVR rate (0). We drop linear-in-$P$ remainders throughout.
 
@@ -72,26 +72,26 @@ Using $C(q + c\mathbf{1}) = c + C(q)$, a one-line check shows that the choice of
 
 Substituting (3) into (1) and using $C(q^\star) = C_0$:
 
-$$V(P) \;=\; C_0 \;-\; \sum_{i=0}^N q_i^\star(P) P_i.$$
+$$V(P)  =  C_0  -  \sum_{i=0}^N q_i^\star(P) P_i.$$
 
 Expand:
 
 $$
 \begin{aligned}
 \sum_{i=0}^N q_i^\star P_i
-&\;=\; q_0^\star \;+\; \sum_{i=1}^N q_i^\star P_i \\
-&\;=\; \bigl[C_0 - b\log(1+S)\bigr] \;+\; \sum_{i=1}^N\bigl[C_0 + b\log P_i - b\log(1+S)\bigr] P_i \\
-&\;=\; C_0(1+S) \;-\; b(1+S)\log(1+S) \;+\; b\sum_{i=1}^N P_i \log P_i.
+& =  q_0^\star  +  \sum_{i=1}^N q_i^\star P_i \\
+& =  \bigl[C_0 - b\log(1+S)\bigr]  +  \sum_{i=1}^N\bigl[C_0 + b\log P_i - b\log(1+S)\bigr] P_i \\
+& =  C_0(1+S)  -  b(1+S)\log(1+S)  +  b\sum_{i=1}^N P_i \log P_i.
 \end{aligned}
 $$
 
 Therefore
 
-$$V(P) \;=\; -C_0 S \;+\; b(1+S)\log(1+S) \;-\; b\sum_{i=1}^N P_i \log P_i.$$
+$$V(P)  =  -C_0 S  +  b(1+S)\log(1+S)  -  b\sum_{i=1}^N P_i \log P_i.$$
 
 The first term, $-C_0 S$, is linear in $P$ and drops from $\nabla^2 V$. We retain only the relevant part:
 
-$$\boxed{\;\; V(P) \;=\; b\,(1+S)\log(1+S) \;-\; b\sum_{i=1}^N P_i \log P_i \pmod{\text{linear in }P}. \;\;} \tag{4}$$
+$$\boxed{   V(P)  =  b (1+S)\log(1+S)  -  b\sum_{i=1}^N P_i \log P_i \pmod{\text{linear in }P}.   } \tag{4}$$
 
 **Remark 3.1.** Equation (4) reduces to the standard two-asset Hanson value function $V(P) = b(1+P)\log(1+P) - bP\log P$ when $N = 1$.
 
@@ -103,81 +103,81 @@ $$\boxed{\;\; V(P) \;=\; b\,(1+S)\log(1+S) \;-\; b\sum_{i=1}^N P_i \log P_i \pmo
 
 Differentiating (4):
 
-$$\frac{\partial V}{\partial P_i} \;=\; b\log(1+S) + b - b\log P_i - b \;=\; b\log\!\frac{1+S}{P_i} \pmod{\text{const}}. \tag{5}$$
+$$\frac{\partial V}{\partial P_i}  =  b\log(1+S) + b - b\log P_i - b  =  b\log\!\frac{1+S}{P_i} \pmod{\text{const}}. \tag{5}$$
 
 Differentiating again:
 
-$$\frac{\partial^2 V}{\partial P_i\,\partial P_j} \;=\; \frac{b}{1+S} \;-\; \frac{b}{P_i}\,\delta_{ij},$$
+$$\frac{\partial^2 V}{\partial P_i \partial P_j}  =  \frac{b}{1+S}  -  \frac{b}{P_i} \delta_{ij},$$
 
 or, in matrix form with $\mathbf 1 = (1, \dots, 1)^{\!\top}$,
 
-$$\boxed{\;\; H(P) \;\equiv\; \nabla^2 V(P) \;=\; \frac{b}{1+S}\,\mathbf 1\mathbf 1^{\!\top} \;-\; b\,\operatorname{diag}(P_i^{-1}). \;\;} \tag{6}$$
+$$\boxed{   H(P)  \equiv  \nabla^2 V(P)  =  \frac{b}{1+S} \mathbf 1\mathbf 1^{\!\top}  -  b \operatorname{diag}(P_i^{-1}).   } \tag{6}$$
 
 **Proposition 4.1 (Strict concavity).** _$V$ is strictly concave on $\mathbb{R}^N_{>0}$._
 
 _Proof._ By Cauchy–Schwarz, $\bigl(\sum_i x_i\bigr)^2 = \bigl(\sum_i (x_i/\sqrt{P_i})\sqrt{P_i}\bigr)^2 \le S\sum_i x_i^2/P_i$. Hence
 
-$$x^{\!\top}(-H)\,x \;=\; b\sum_i \frac{x_i^2}{P_i} - \frac{b}{1+S}\Bigl(\sum_i x_i\Bigr)^{\!2} \;\ge\; \frac{b}{1+S}\sum_i \frac{x_i^2}{P_i} \;>\; 0$$
+$$x^{\!\top}(-H) x  =  b\sum_i \frac{x_i^2}{P_i} - \frac{b}{1+S}\Bigl(\sum_i x_i\Bigr)^{\!2}  \ge  \frac{b}{1+S}\sum_i \frac{x_i^2}{P_i}  >  0$$
 
 for $x \ne 0$. $\quad\blacksquare$
 
-**Structural observation.** Equation (6) decomposes $H$ into a rank-one coupling $\tfrac{b}{1+S}\mathbf 1\mathbf 1^{\!\top}$ minus a diagonal piece $-b\,\operatorname{diag}(P_i^{-1})$. The diagonal piece is the same local curvature that would be obtained from $N$ isolated two-asset LMSRs at the same liquidity $b$. The off-diagonal piece — uniform entries $H_{ij} = b/(1+S)$ for every $i \ne j$ — is the _shared-simplex channel_: an arbitrage against asset $i$ adjusts the simplex weight $p_0$ of the numéraire and thereby moves the marginal exchange rate of every other asset $j$. As we will see, this coupling is exactly what produces the cross-correlation discount in $(\dagger)$.
+**Structural observation.** Equation (6) decomposes $H$ into a rank-one coupling $\tfrac{b}{1+S}\mathbf 1\mathbf 1^{\!\top}$ minus a diagonal piece $-b \operatorname{diag}(P_i^{-1})$. The diagonal piece is the same local curvature that would be obtained from $N$ isolated two-asset LMSRs at the same liquidity $b$. The off-diagonal piece — uniform entries $H_{ij} = b/(1+S)$ for every $i \ne j$ — is the _shared-simplex channel_: an arbitrage against asset $i$ adjusts the simplex weight $p_0$ of the numéraire and thereby moves the marginal exchange rate of every other asset $j$. As we will see, this coupling is exactly what produces the cross-correlation discount in $(\dagger)$.
 
 ---
 
 ## 5. LVR Master Formula
 
-We now substitute (6) into the value-function LVR formula and develop three equivalent forms of the resulting expression: the independent-pair / discount decomposition $(\dagger)$, the common-mode / relative-mode form (Theorem 5.4), and a trace form $\ell(P) = \tfrac{b}{2}\operatorname{Tr}[M(P)\,\Sigma]$ that makes the geometric content transparent. We close the section with the separable-CFMM comparison (Proposition 5.5).
+We now substitute (6) into the value-function LVR formula and develop three equivalent forms of the resulting expression: the independent-pair / discount decomposition $(\dagger)$, the common-mode / relative-mode form (Theorem 5.4), and a trace form $\ell(P) = \tfrac{b}{2}\operatorname{Tr}[M(P) \Sigma]$ that makes the geometric content transparent. We close the section with the separable-CFMM comparison (Proposition 5.5).
 
 ### 5.1 The master decomposition
 
-By Milionis et al. (2024, Theorem 1), specialized to (0), the instantaneous LVR rate of a CFMM with $C^2$ concave value function $V(P)$ under an Itô price process with $\langle dP_i, dP_j\rangle = P_i P_j \Sigma_{ij}\,dt$ is
+By Milionis et al. (2024, Theorem 1), specialized to (0), the instantaneous LVR rate of a CFMM with $C^2$ concave value function $V(P)$ under an Itô price process with $\langle dP_i, dP_j\rangle = P_i P_j \Sigma_{ij} dt$ is
 
-$$\ell(P) \;=\; -\tfrac{1}{2}\sum_{i,j=1}^N P_i P_j \,\Sigma_{ij}\, H_{ij}(P). \tag{7}$$
+$$\ell(P)  =  -\tfrac{1}{2}\sum_{i,j=1}^N P_i P_j  \Sigma_{ij}  H_{ij}(P). \tag{7}$$
 
 Our equilibrium $V(P)$ in (4) is $C^\infty$ on $\mathbb{R}^N_{>0}$ and strictly concave (Proposition 4.1), so the regularity hypotheses of Milionis et al.'s Theorem 1 are satisfied. The right-hand side is non-negative because $-H$ is PSD and $\Sigma$ is PSD. Substituting (6):
 
 $$
 \begin{aligned}
 \ell(P)
-&\;=\; -\tfrac{1}{2}\sum_{i,j} P_i P_j \Sigma_{ij}\Bigl[\frac{b}{1+S} - \frac{b}{P_i}\,\delta_{ij}\Bigr] \\
-&\;=\; \frac{b}{2}\sum_i \Sigma_{ii}\, P_i \;-\; \frac{b}{2(1+S)}\sum_{i,j} P_i P_j \Sigma_{ij},
+& =  -\tfrac{1}{2}\sum_{i,j} P_i P_j \Sigma_{ij}\Bigl[\frac{b}{1+S} - \frac{b}{P_i} \delta_{ij}\Bigr] \\
+& =  \frac{b}{2}\sum_i \Sigma_{ii}  P_i  -  \frac{b}{2(1+S)}\sum_{i,j} P_i P_j \Sigma_{ij},
 \end{aligned}
 $$
 
 which we package as
 
-$$\boxed{\;\; \ell(P) \;=\; \underbrace{\frac{b}{2}\sum_{i=1}^N \sigma_i^2 P_i}_{\ell_{\mathrm{ind}}(P)} \;-\; \underbrace{\frac{b}{2(1+S)}\, P^{\!\top}\!\Sigma P}_{\Delta(P)}. \;\;} \tag{\dagger}$$
+$$\boxed{   \ell(P)  =  \underbrace{\frac{b}{2}\sum_{i=1}^N \sigma_i^2 P_i}_{\ell_{\mathrm{ind}}(P)}  -  \underbrace{\frac{b}{2(1+S)}  P^{\!\top}\!\Sigma P}_{\Delta(P)}.   } \tag{\dagger}$$
 
-**Independent-pair benchmark $\ell_{\mathrm{ind}}(P)$.** This is the value of (7) when $H$ is replaced by its diagonal $-b\,\operatorname{diag}(P_i^{-1})$ — equivalently, the LVR rate of $N$ isolated (numéraire, asset $i$) two-asset LMSRs at liquidity $b$, summed across $i$.
+**Independent-pair benchmark $\ell_{\mathrm{ind}}(P)$.** This is the value of (7) when $H$ is replaced by its diagonal $-b \operatorname{diag}(P_i^{-1})$ — equivalently, the LVR rate of $N$ isolated (numéraire, asset $i$) two-asset LMSRs at liquidity $b$, summed across $i$.
 
 **Cross-correlation discount $\Delta(P)$.** The amount removed by the simplex-coupling term in $H$. Because $\Sigma$ is PSD, $P^{\!\top}\!\Sigma P \ge 0$ for every covariance structure, so
 
-$$\Delta(P) \;\ge\; 0 \qquad\text{and}\qquad \ell(P) \;\le\; \ell_{\mathrm{ind}}(P) \quad \text{unconditionally}.$$
+$$\Delta(P)  \ge  0 \qquad\text{and}\qquad \ell(P)  \le  \ell_{\mathrm{ind}}(P) \quad \text{unconditionally}.$$
 
 ### 5.2 Basket-variance and trace forms
 
 Let $w_i = P_i/S$ be the value-weighted risky-asset weights and $\bar r = w^{\!\top} r$ the basket return, with variance
 
-$$\sigma_{\mathrm{bkt}}^2 \;\equiv\; \mathrm{Var}(\bar r) \;=\; w^{\!\top}\!\Sigma w.$$
+$$\sigma_{\mathrm{bkt}}^2  \equiv  \mathrm{Var}(\bar r)  =  w^{\!\top}\!\Sigma w.$$
 
 Then $P^{\!\top}\!\Sigma P = S^2\sigma_{\mathrm{bkt}}^2$ and $(\dagger)$ rewrites as
 
-$$\ell(P) \;=\; \frac{b}{2}\sum_i \sigma_i^2 P_i \;-\; \frac{b\, S^2}{2(1+S)}\,\sigma_{\mathrm{bkt}}^2. \tag{$\dagger'$}$$
+$$\ell(P)  =  \frac{b}{2}\sum_i \sigma_i^2 P_i  -  \frac{b  S^2}{2(1+S)} \sigma_{\mathrm{bkt}}^2. \tag{$\dagger'$}$$
 
 In matrix language, with $D_P \equiv \operatorname{diag}(P)$,
 
-$$\ell(P) \;=\; \frac{b}{2}\operatorname{Tr}(D_P \Sigma) \;-\; \frac{b}{2(1+S)}\operatorname{Tr}(PP^{\!\top}\Sigma) \;=\; \frac{b}{2}\operatorname{Tr}\!\bigl[M(P)\,\Sigma\bigr], \tag{$\dagger''$}$$
+$$\ell(P)  =  \frac{b}{2}\operatorname{Tr}(D_P \Sigma)  -  \frac{b}{2(1+S)}\operatorname{Tr}(PP^{\!\top}\Sigma)  =  \frac{b}{2}\operatorname{Tr}\!\bigl[M(P) \Sigma\bigr], \tag{$\dagger''$}$$
 
 where
 
-$$M(P) \;\equiv\; D_P \;-\; \frac{PP^{\!\top}}{1+S}$$
+$$M(P)  \equiv  D_P  -  \frac{PP^{\!\top}}{1+S}$$
 
 is the LMSR's _LVR operator_. It is PSD on $\mathbb{R}^N$: applying Cauchy–Schwarz with $u_i = x_i\sqrt{P_i}$ and $v_i = \sqrt{P_i}$,
 
-$$(P^{\!\top} x)^2 \;=\; \Bigl(\sum_i P_i x_i\Bigr)^{\!2} \;\le\; \Bigl(\sum_i P_i x_i^2\Bigr)\Bigl(\sum_i P_i\Bigr) \;=\; S\, x^{\!\top}D_P x,$$
+$$(P^{\!\top} x)^2  =  \Bigl(\sum_i P_i x_i\Bigr)^{\!2}  \le  \Bigl(\sum_i P_i x_i^2\Bigr)\Bigl(\sum_i P_i\Bigr)  =  S  x^{\!\top}D_P x,$$
 
-so $x^{\!\top}M(P)x = x^{\!\top}D_P x - (P^{\!\top}x)^2/(1+S) \ge \tfrac{1}{1+S}\,x^{\!\top}D_P x \ge 0$. Geometrically, $M(P)$ deflates the rank-one component of $\Sigma$ aligned with the price vector $P$, and the LVR rate is the trace inner product of this deflated covariance with the simplex-coupling structure.
+so $x^{\!\top}M(P)x = x^{\!\top}D_P x - (P^{\!\top}x)^2/(1+S) \ge \tfrac{1}{1+S} x^{\!\top}D_P x \ge 0$. Geometrically, $M(P)$ deflates the rank-one component of $\Sigma$ aligned with the price vector $P$, and the LVR rate is the trace inner product of this deflated covariance with the simplex-coupling structure.
 
 ### 5.3 Common-mode / relative-mode decomposition
 
@@ -185,22 +185,22 @@ The trace form $(\dagger'')$ makes manifest that $\ell$ depends on $\Sigma$ only
 
 **Theorem 5.4 (Common-mode suppression).** _For each $i$, let $\sigma_{i,\mathrm{rel}}^2 \equiv \mathrm{Var}(r_i - \bar r)$ denote the variance of asset $i$'s return relative to the value-weighted basket return $\bar r = w^{\!\top}r$, where $w_i = P_i/S$. Then $(\dagger)$ is equivalent to_
 
-$$\boxed{\;\; \ell(P) \;=\; \underbrace{\frac{b}{2}\sum_{i=1}^N P_i\,\sigma_{i,\mathrm{rel}}^2}_{\ell_{\mathrm{rel}}(P)\ \text{— relative-mode}} \;+\; \underbrace{\frac{b\, S}{2(1+S)}\,\sigma_{\mathrm{bkt}}^2}_{\ell_{\mathrm{cm}}(P)\ \text{— common-mode}}. \;\;} \tag{$\ddagger$}$$
+$$\boxed{   \ell(P)  =  \underbrace{\frac{b}{2}\sum_{i=1}^N P_i \sigma_{i,\mathrm{rel}}^2}_{\ell_{\mathrm{rel}}(P)\ \text{— relative-mode}}  +  \underbrace{\frac{b  S}{2(1+S)} \sigma_{\mathrm{bkt}}^2}_{\ell_{\mathrm{cm}}(P)\ \text{— common-mode}}.   } \tag{$\ddagger$}$$
 
-_Proof._ Direct algebra. Expand $\sigma_{i,\mathrm{rel}}^2 = \mathrm{Var}(r_i) - 2\,\mathrm{Cov}(r_i, \bar r) + \mathrm{Var}(\bar r) = \Sigma_{ii} - 2(\Sigma w)_i + \sigma_{\mathrm{bkt}}^2$. Multiply by $P_i$ and sum:
+_Proof._ Direct algebra. Expand $\sigma_{i,\mathrm{rel}}^2 = \mathrm{Var}(r_i) - 2 \mathrm{Cov}(r_i, \bar r) + \mathrm{Var}(\bar r) = \Sigma_{ii} - 2(\Sigma w)_i + \sigma_{\mathrm{bkt}}^2$. Multiply by $P_i$ and sum:
 
-$$\sum_i P_i\,\sigma_{i,\mathrm{rel}}^2 \;=\; \sum_i P_i \Sigma_{ii} \;-\; 2\sum_i P_i (\Sigma w)_i \;+\; S\,\sigma_{\mathrm{bkt}}^2.$$
+$$\sum_i P_i \sigma_{i,\mathrm{rel}}^2  =  \sum_i P_i \Sigma_{ii}  -  2\sum_i P_i (\Sigma w)_i  +  S \sigma_{\mathrm{bkt}}^2.$$
 
-Using $\sum_i P_i (\Sigma w)_i = S\sum_i w_i(\Sigma w)_i = S\,w^{\!\top}\Sigma w = S\,\sigma_{\mathrm{bkt}}^2$,
+Using $\sum_i P_i (\Sigma w)_i = S\sum_i w_i(\Sigma w)_i = S w^{\!\top}\Sigma w = S \sigma_{\mathrm{bkt}}^2$,
 
-$$\sum_i P_i\,\sigma_{i,\mathrm{rel}}^2 \;=\; \sum_i P_i \Sigma_{ii} \;-\; S\,\sigma_{\mathrm{bkt}}^2. \tag{$\star$}$$
+$$\sum_i P_i \sigma_{i,\mathrm{rel}}^2  =  \sum_i P_i \Sigma_{ii}  -  S \sigma_{\mathrm{bkt}}^2. \tag{$\star$}$$
 
 Therefore
 
-$$\frac{b}{2}\sum_i P_i \sigma_{i,\mathrm{rel}}^2 \;+\; \frac{b\,S}{2(1+S)}\sigma_{\mathrm{bkt}}^2
-\;=\; \frac{b}{2}\sum_i \sigma_i^2 P_i \;-\; \frac{b\,S}{2}\sigma_{\mathrm{bkt}}^2 \;+\; \frac{b\,S}{2(1+S)}\sigma_{\mathrm{bkt}}^2,$$
+$$\frac{b}{2}\sum_i P_i \sigma_{i,\mathrm{rel}}^2  +  \frac{b S}{2(1+S)}\sigma_{\mathrm{bkt}}^2
+ =  \frac{b}{2}\sum_i \sigma_i^2 P_i  -  \frac{b S}{2}\sigma_{\mathrm{bkt}}^2  +  \frac{b S}{2(1+S)}\sigma_{\mathrm{bkt}}^2,$$
 
-and combining the last two terms gives $-\tfrac{b\,S^2}{2(1+S)}\sigma_{\mathrm{bkt}}^2$, which is precisely $-\Delta(P)$ by $(\dagger')$. $\quad\blacksquare$
+and combining the last two terms gives $-\tfrac{b S^2}{2(1+S)}\sigma_{\mathrm{bkt}}^2$, which is precisely $-\Delta(P)$ by $(\dagger')$. $\quad\blacksquare$
 
 The decomposition $(\ddagger)$ is the precise mathematical content of the heuristic that LMSR's shared simplex "filters out coherent basket motion": the entire basket-variance contribution is captured by the single common-mode term $\ell_{\mathrm{cm}}$, which is the LVR rate one would compute for a two-asset LMSR holding the basket aggregate against the numéraire; the residual relative-mode term $\ell_{\mathrm{rel}}$ is driven only by idiosyncratic variances $\mathrm{Var}(r_i - \bar r)$ and is exactly the LVR that survives in the no-numéraire limit (§6.3).
 
@@ -212,7 +212,7 @@ The discount in $(\dagger)$ traces to the off-diagonal coupling in (6). The foll
 
 **Proposition 5.5 (Separable CFMMs have diagonal Hessian).** _Let $V(P) = \sum_{i=1}^N V_i(P_i)$ be the pool value of a system of $N$ disjoint two-asset CFMMs, each with its own $C^2$ concave value function $V_i:\mathbb{R}_{>0}\to\mathbb{R}$. Then $\nabla^2 V$ is diagonal, and the LVR rate evaluates to_
 
-$$\ell_{\mathrm{sep}}(P) \;=\; -\tfrac{1}{2}\sum_i P_i^2 \sigma_i^2 V_i''(P_i),$$
+$$\ell_{\mathrm{sep}}(P)  =  -\tfrac{1}{2}\sum_i P_i^2 \sigma_i^2 V_i''(P_i),$$
 
 _which depends on $\Sigma$ only through its diagonal entries $\sigma_i^2$ and admits no cross-correlation discount._
 
@@ -230,11 +230,11 @@ We close with three closed-form specializations.
 
 Set $\sigma_i = \sigma$, $\rho_{ij} = 1$ for all $i, j$, and balance the risky leg: $P_i = S/N$ for every $i \ge 1$. Under these assumptions $r_i = \bar r$ almost surely, so the relative-mode contribution in $(\ddagger)$ vanishes: $\sigma_{i,\mathrm{rel}}^2 = 0$ for all $i$. The common-mode contribution evaluates with $\sigma_{\mathrm{bkt}}^2 = \sigma^2$ to
 
-$$\ell_{\rho=1} \;=\; \ell_{\mathrm{cm}} \;=\; \frac{b\,\sigma^2\,S}{2(1+S)}. \tag{8}$$
+$$\ell_{\rho=1}  =  \ell_{\mathrm{cm}}  =  \frac{b \sigma^2 S}{2(1+S)}. \tag{8}$$
 
 This is exactly the LVR rate of a two-asset Hanson LMSR with matched liquidity parameter $b$ and matched risky-leg mark-to-market $S$ — the precise sense of "equivalent total risky value" used throughout. The $N$ perfectly correlated assets behave jointly as a single synthetic asset; the simplex-coupling channel has absorbed every $N-1$ of the diagonal contributions in $\ell_{\mathrm{ind}}$. The ratio to the independent-pair benchmark is
 
-$$\frac{\ell_{\rho=1}}{\ell_{\mathrm{ind}}} \;=\; \frac{1}{1+S},$$
+$$\frac{\ell_{\rho=1}}{\ell_{\mathrm{ind}}}  =  \frac{1}{1+S},$$
 
 so a balanced pool ($S = 1$) suffers half the LVR of the analogous collection of $N$ independent two-asset LMSRs at the same $b$.
 
@@ -242,11 +242,11 @@ so a balanced pool ($S = 1$) suffers half the LVR of the analogous collection of
 
 Retain $\sigma_i = \sigma$ and $P_i = S/N$, but allow an arbitrary average pairwise correlation $\bar\rho \equiv \tfrac{2}{N(N-1)}\sum_{i<j}\rho_{ij}$. Then $\sigma_{\mathrm{bkt}}^2 = \tfrac{\sigma^2}{N}(1 + (N-1)\bar\rho)$, and $(\dagger)$ together with the computation of $P^{\!\top}\!\Sigma P = \sigma^2 S^2 \bigl(1 + (N-1)\bar\rho\bigr)/N$ gives
 
-$$\ell \;=\; \frac{b\,\sigma^2\,S}{2N(1+S)}\Bigl[N \;+\; S(N-1)(1-\bar\rho)\Bigr]. \tag{9}$$
+$$\ell  =  \frac{b \sigma^2 S}{2N(1+S)}\Bigl[N  +  S(N-1)(1-\bar\rho)\Bigr]. \tag{9}$$
 
-Differentiating, $\partial \ell / \partial \bar\rho = -\tfrac{b\,\sigma^2\,S^2(N-1)}{2N(1+S)} < 0$ for every $N \ge 2$, so $\ell$ is strictly monotonically decreasing in $\bar\rho$, with the perfectly-correlated floor (8) at $\bar\rho = 1$ and a maximum at $\bar\rho = 0$. The reduction factor from uncorrelated to perfectly correlated is
+Differentiating, $\partial \ell / \partial \bar\rho = -\tfrac{b \sigma^2 S^2(N-1)}{2N(1+S)} < 0$ for every $N \ge 2$, so $\ell$ is strictly monotonically decreasing in $\bar\rho$, with the perfectly-correlated floor (8) at $\bar\rho = 1$ and a maximum at $\bar\rho = 0$. The reduction factor from uncorrelated to perfectly correlated is
 
-$$\frac{\ell_{\bar\rho=1}}{\ell_{\bar\rho=0}} \;=\; \frac{N}{N + S(N-1)} \;\xrightarrow[N\to\infty]{}\; \frac{1}{1+S}.$$
+$$\frac{\ell_{\bar\rho=1}}{\ell_{\bar\rho=0}}  =  \frac{N}{N + S(N-1)}  \xrightarrow[N\to\infty]{}  \frac{1}{1+S}.$$
 
 Figure 1 plots $\ell/\ell_{\mathrm{ind}}$ as a function of $\bar\rho$ for a balanced pool ($S=1$) and several values of $N$. All curves terminate at the common floor $1/(1+S) = 1/2$ at $\bar\rho = 1$ and spread upward toward $\bar\rho = 0$, where the discount remains substantial for small $N$ and vanishes for large $N$ (asymptoting to the no-discount limit $\ell_{\mathrm{ind}}$).
 
@@ -256,15 +256,15 @@ Figure 1 plots $\ell/\ell_{\mathrm{ind}}$ as a function of $\bar\rho$ for a bala
 
 If the LMSR pool holds only risky assets, with no numéraire, no asset has a fixed external price. Arbitrage equilibrates only the _relative_ prices: $p_i/p_j = P_i/P_j$ for every $i, j$, giving $p_i(q^\star) = P_i/T$ with $T \equiv \sum_{i=1}^N P_i$. Repeating §§3–5 with the cash leg removed yields
 
-$$V_{\mathrm{nc}}(P) \;=\; b\,T \log T \;-\; b\sum_{i=1}^N P_i \log P_i \pmod{\text{linear in }P}, \qquad H_{ij}^{\mathrm{nc}}(P) \;=\; \frac{b}{T} \;-\; \frac{b}{P_i}\,\delta_{ij},$$
+$$V_{\mathrm{nc}}(P)  =  b T \log T  -  b\sum_{i=1}^N P_i \log P_i \pmod{\text{linear in }P}, \qquad H_{ij}^{\mathrm{nc}}(P)  =  \frac{b}{T}  -  \frac{b}{P_i} \delta_{ij},$$
 
-$$\ell_{\mathrm{nc}}(P) \;=\; \frac{b}{2}\Bigl[\sum_i \sigma_i^2 P_i \;-\; \frac{P^{\!\top}\!\Sigma P}{T}\Bigr] \;=\; \frac{b}{2}\sum_{i=1}^N P_i\,\sigma_{i,\mathrm{rel,nc}}^2, \tag{10}$$
+$$\ell_{\mathrm{nc}}(P)  =  \frac{b}{2}\Bigl[\sum_i \sigma_i^2 P_i  -  \frac{P^{\!\top}\!\Sigma P}{T}\Bigr]  =  \frac{b}{2}\sum_{i=1}^N P_i \sigma_{i,\mathrm{rel,nc}}^2, \tag{10}$$
 
 where in the last equality $\bar r_{\mathrm{nc}} = (P/T)^{\!\top}r$ is the value-weighted basket return _within the risky leg_ and $\sigma_{i,\mathrm{rel,nc}}^2 = \mathrm{Var}(r_i - \bar r_{\mathrm{nc}})$. (The algebraic step is identity ($\star$) applied with $T$ in place of $S$.) That is, a no-numéraire LMSR's LVR rate consists _only_ of the relative-mode contribution: with no cash to arbitrage against, the common-mode channel is structurally absent.
 
 **Corollary 6.1.** _Under perfectly correlated equal-volatility log-returns $d\log P_i = dX_t$ for every $i$ (a common Brownian-motion driver), $r_i \equiv \bar r_{\mathrm{nc}}$ a.s. for every $i$, so $\sigma_{i,\mathrm{rel,nc}}^2 = 0$ and_
 
-$$\boxed{\;\; \ell_{\rho=1}^{\,\mathrm{nc}} \;=\; 0. \;\;} \tag{11}$$
+$$\boxed{   \ell_{\rho=1}^{ \mathrm{nc}}  =  0.   } \tag{11}$$
 
 A no-numéraire LMSR of perfectly correlated assets suffers zero LVR. The argument is direct: collinear log-returns imply all $P_i$ scale by the same factor $\exp(X_t - X_0)$, so the ratios $P_i/P_j$ are constant, and the pool's marginal prices $p_i = P_i/T$ — which depend only on those ratios — never move. No arbitrage opportunity is ever generated. The cross-correlation discount has consumed the entire LVR.
 
@@ -278,7 +278,7 @@ We have derived in closed form the instantaneous LVR rate of the multi-asset Han
 
 Equivalently, by Theorem 5.4, the rate splits orthogonally into a relative-mode contribution and a single common-mode contribution,
 
-$$\ell(P) \;=\; \frac{b}{2}\sum_i P_i\,\mathrm{Var}(r_i - \bar r) \;+\; \frac{b\,S}{2(1+S)}\,\mathrm{Var}(\bar r),$$
+$$\ell(P)  =  \frac{b}{2}\sum_i P_i \mathrm{Var}(r_i - \bar r)  +  \frac{b S}{2(1+S)} \mathrm{Var}(\bar r),$$
 
 making explicit that LMSR's shared simplex filters out the basket-direction common mode: the value-weighted-basket contribution to LVR is captured exactly once, as if the basket were a single synthetic asset, regardless of how many constituents the pool holds.
 
