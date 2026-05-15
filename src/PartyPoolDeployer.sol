@@ -81,8 +81,13 @@ contract PartyPoolDeployer is IPartyPoolDeployer {
         address poolAddress;
         assembly {
             poolAddress := create2(0, add(initCode, 0x20), mload(initCode), salt)
+            // Propagate the constructor's revert data (if any) so the caller sees the
+            // actual reason — e.g. "zero base" / "too many tokens" from validation in
+            // `PartyPoolExtraImpl.init` — instead of an opaque empty revert.
             if iszero(poolAddress) {
-                revert(0, 0)
+                let p := mload(0x40)
+                returndatacopy(p, 0, returndatasize())
+                revert(p, returndatasize())
             }
         }
 

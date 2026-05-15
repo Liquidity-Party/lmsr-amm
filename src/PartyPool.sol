@@ -58,8 +58,13 @@ contract PartyPool is PartyPoolBase, OwnableExternal, ERC20External, IPartyPool 
     // slither-disable-next-line naming-convention
     int128 private immutable KAPPA;
 
-    /// @notice Per-asset swap fees in ppm.
-    function fees() external view returns (uint256[] memory) { return _fees; }
+    /// @notice Address of the "BFStore" SSTORE2 data contract holding per-token bases and
+    ///         per-asset fees. Off-chain readers (and `PartyInfo.denominators(pool)` /
+    ///         `PartyInfo.fees(pool)`) decode it via `EXTCODECOPY`; the deployed bytecode
+    ///         layout is `0x00 || bases (32B × n) || fees (32B × n)`. See PartyPoolBase
+    ///         for the in-pool read helpers (`_baseAt`, `_feeAt`, `_basesArray`,
+    ///         `_pairFeePpmView`) that hot paths use directly.
+    function bfStore() external view returns (address) { return IMMUTABLE_BFSTORE; }
 
     /// @notice Flash-loan fee in parts-per-million (ppm) applied to flash borrow amounts.
     // slither-disable-next-line naming-convention
@@ -70,11 +75,6 @@ contract PartyPool is PartyPoolBase, OwnableExternal, ERC20External, IPartyPool 
     // slither-disable-next-line naming-convention
     uint256 private immutable PROTOCOL_FEE_PPM;
     function protocolFeePpm() external view returns (uint256) { return PROTOCOL_FEE_PPM; }
-
-    /// @notice Number of tokens in the pool — immutable after construction, used to avoid
-    /// repeated SLOAD of array lengths during the swap hot path.
-    // slither-disable-next-line naming-convention
-    uint256 private immutable NUM_TOKENS;
 
     /// @notice Address to which collected protocol tokens will be sent on collectProtocolFees()
     address public protocolFeeAddress;
@@ -92,9 +92,6 @@ contract PartyPool is PartyPoolBase, OwnableExternal, ERC20External, IPartyPool 
     function allTokens() external view returns (IERC20[] memory) { return _tokens; }
 
     /// @inheritdoc IPartyPool
-    function denominators() external view returns (uint256[] memory) { return _bases; }
-
-    /// @inheritdoc IPartyPool
     // LMSR is the named acronym (Logarithmic Market Scoring Rule); the getter is
     // intentionally upper-case to match the literature and the IPartyPool interface.
     // slither-disable-next-line naming-convention
@@ -103,16 +100,23 @@ contract PartyPool is PartyPoolBase, OwnableExternal, ERC20External, IPartyPool 
     constructor()
     {
         IPartyPoolDeployer.DeployParams memory p = IPartyPoolDeployer(msg.sender).params();
-        // Immutables must be assigned syntactically inside the constructor; everything else
-        // (validation, storage init, ownership transfer) is delegated to PartyPoolExtraImpl
-        // to keep this contract's creation code under EIP-170.
+        // Immutables must be assigned syntactically inside the constructor; all other
+        // setup (length-and-bound validation, BFStore deployment, storage init,
+        // ownership transfer) is delegated to PartyPoolExtraImpl via delegatecall.
+        // Keeping this constructor body minimal is important because PartyPool's
+        // creation code is embedded as a runtime constant in `PartyPoolInitCode`,
+        // which is itself subject to EIP-170's 24,576-byte deployed-bytecode cap.
         NUM_TOKENS = p.tokens.length;
         WRAPPER = p.wrapper;
         PERMIT2 = p.permit2;
         KAPPA = p.kappa;
         FLASH_FEE_PPM = p.flashFeePpm;
         PROTOCOL_FEE_PPM = p.protocolFeePpm;
-        PartyPoolExtraImpl.init(p);
+        // init validates inputs, populates storage, and deploys the SSTORE2 BFStore data
+        // contract; its return value is the BFStore address that hot-path bases/fees reads
+        // (EXTCODECOPY) target via this immutable. Folding deployment into init keeps
+        // PartyPool's creation code small enough for `PartyPoolInitCode` to fit EIP-170.
+        IMMUTABLE_BFSTORE = PartyPoolExtraImpl.init(p);
     }
 
     //
@@ -146,7 +150,7 @@ contract PartyPool is PartyPoolBase, OwnableExternal, ERC20External, IPartyPool 
     /// @inheritdoc IPartyPool
     function initialMint(address receiver, uint256 lpTokens) external payable native killable nonReentrant
     returns (uint256 lpMinted) {
-        return PartyPoolMintImpl.initialMint(receiver, lpTokens, KAPPA);
+        return PartyPoolMintImpl.initialMint(receiver, lpTokens, KAPPA, _basesArray());
     }
 
     /// @inheritdoc IPartyPool
@@ -158,13 +162,13 @@ contract PartyPool is PartyPoolBase, OwnableExternal, ERC20External, IPartyPool 
         uint256 deadline,
         bytes memory cbData
     ) external payable native killable nonReentrant returns (uint256 lpMinted) {
-        return PartyPoolMintImpl.mint(payer, fundingSelector, receiver, lpTokenAmount, deadline, cbData, WRAPPER, PERMIT2);
+        return PartyPoolMintImpl.mint(payer, fundingSelector, receiver, lpTokenAmount, deadline, cbData, WRAPPER, PERMIT2, _basesArray());
     }
 
     /// @inheritdoc IPartyPool
     function burn(address payer, address receiver, uint256 lpAmount, uint256 deadline, bool unwrap) external nonReentrant
     returns (uint256[] memory withdrawAmounts) {
-        return PartyPoolMintImpl.burn(payer, receiver, lpAmount, deadline, unwrap, WRAPPER);
+        return PartyPoolMintImpl.burn(payer, receiver, lpAmount, deadline, unwrap, WRAPPER, _basesArray());
     }
 
     /* ----------------------
@@ -324,8 +328,8 @@ contract PartyPool is PartyPoolBase, OwnableExternal, ERC20External, IPartyPool 
         return PartyPoolMintImpl.swapMint(
             payer, fundingSelector, receiver,
             inputTokenIndex, lpAmountOut, maxAmountIn, deadline, cbData,
-            _assetFeePpm(inputTokenIndex), PROTOCOL_FEE_PPM,
-            WRAPPER, PERMIT2
+            _feeAt(inputTokenIndex), PROTOCOL_FEE_PPM,
+            WRAPPER, PERMIT2, _basesArray()
         );
     }
 
@@ -344,8 +348,8 @@ contract PartyPool is PartyPoolBase, OwnableExternal, ERC20External, IPartyPool 
         return PartyPoolMintImpl.burnSwap(
             payer, receiver, lpAmount,
             outputTokenIndex, minAmountOut, deadline, unwrap,
-            _assetFeePpm(outputTokenIndex), PROTOCOL_FEE_PPM,
-            WRAPPER
+            _feeAt(outputTokenIndex), PROTOCOL_FEE_PPM,
+            WRAPPER, _basesArray()
         );
     }
 

@@ -543,7 +543,7 @@ contract M1_SwapMintQInternalSyncTest is Test {
         // pool.LMSR() returns the full State struct; qInternal is its int128[] field.
         LMSRStabilized.State memory s = pool.LMSR();
         uint256[] memory cached = pool.balances();
-        uint256[] memory bases = pool.denominators();
+        uint256[] memory bases = info.denominators(pool);
 
         for (uint256 i = 0; i < 2; i++) {
             // expected uint balance derived from qInternal[i] · base[i] (floor)

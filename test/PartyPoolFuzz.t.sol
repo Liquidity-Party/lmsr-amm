@@ -193,7 +193,7 @@ contract PartyPoolFuzzTest is PartyPoolBase {
         if (inputIdx == outputIdx) outputIdx = (outputIdx + 1) % n_;
         amountIn = bound(amountIn, AMOUNT_MIN, INIT_BAL / 100);
 
-        uint256[] memory feesArr = pool.fees();
+        uint256[] memory feesArr = info.fees(pool);
         vm.assume(feesArr[inputIdx] + feesArr[outputIdx] > 0);
 
         TestERC20 inTok  = _tok3(inputIdx);
@@ -240,7 +240,7 @@ contract PartyPoolFuzzTest is PartyPoolBase {
         if (inputIdx == outputIdx) outputIdx = (outputIdx + 1) % n_;
         maxIn = bound(maxIn, AMOUNT_MIN, INIT_BAL);
 
-        uint256[] memory feesArr = pool.fees();
+        uint256[] memory feesArr = info.fees(pool);
         vm.assume(feesArr[inputIdx] + feesArr[outputIdx] > 0);
 
         TestERC20 inTok = _tok3(inputIdx);
@@ -483,7 +483,7 @@ contract PartyPoolFuzzTest is PartyPoolBase {
         inputIdx = bound(inputIdx, 0, pool.numTokens() - 1);
         lpAmountOut = bound(lpAmountOut, 1, pool.totalSupply());
 
-        uint256[] memory feesArr = pool.fees();
+        uint256[] memory feesArr = info.fees(pool);
         vm.assume(feesArr[inputIdx] > 0);
 
         TestERC20 inTok = _tok3(inputIdx);
@@ -613,7 +613,7 @@ contract PartyPoolFuzzTest is PartyPoolBase {
         uint256 lpBurn = thisLp * frac / 100;
         if (lpBurn == 0) lpBurn = 1;
 
-        uint256[] memory feesArr = pool.fees();
+        uint256[] memory feesArr = info.fees(pool);
         vm.assume(feesArr[outputIdx] > 0);
 
         uint256 amountOut; uint256 outFee;
@@ -923,7 +923,7 @@ contract PartyPoolFuzzTest is PartyPoolBase {
         if (inputIdx == outputIdx) outputIdx = (outputIdx + 1) % n_;
         amountIn = bound(amountIn, AMOUNT_MIN, INIT_BAL / 100);
 
-        uint256[] memory feesArr = pool10.fees();
+        uint256[] memory feesArr = info.fees(pool10);
         vm.assume(feesArr[inputIdx] + feesArr[outputIdx] > 0);
 
         TestERC20 inTok  = TestERC20(address(pool10.token(inputIdx)));

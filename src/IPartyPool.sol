@@ -23,7 +23,7 @@ import {NativeWrapper} from "./NativeWrapper.sol";
 /// (i.e., floor outputs to users, ceil inputs/fees where appropriate).
 ///
 /// @dev **Read-only reentrancy / oracle safety.** The view functions on this interface
-/// (`balances`, `LMSR`, `allProtocolFeesOwed`, `denominators`, `fees`, etc., and the price helpers
+/// (`balances`, `LMSR`, `allProtocolFeesOwed`, etc., and the bases/fees and price helpers
 /// in `IPartyInfo`) are **not protected against read-only reentrancy** and **must not be used as a
 /// same-transaction price oracle by other contracts**. State-mutating entry points perform external
 /// token transfers before all storage writes have settled; an integrator that reads pool state from
@@ -113,12 +113,12 @@ interface IPartyPool is IERC20Metadata, IOwnable {
     /// which includes any unclaimed protocol fees. The tvl() plus protocolFeesOwed() equals the total pool balance.
     function balances() external view returns (uint256[] memory);
 
-    /// @notice Per-token uint base denominators used to convert uint token amounts <-> internal Q64.64 representation.
-    /// @dev denominators()[i] is the base for tokens[i]. These bases are chosen by deployer and must match token decimals.
-    function denominators() external view returns (uint256[] memory);
-
-    /// @notice Per-asset swap fees in ppm. Fees are applied on input; for asset-to-asset swaps, add the two asset fees.
-    function fees() external view returns (uint256[] memory);
+    /// @notice Address of the "BFStore" SSTORE2 data contract holding per-token bases (denominators
+    ///         used to convert uint token amounts ↔ internal Q64.64) and per-asset fees (ppm).
+    ///         Deployed bytecode layout: `0x00 || bases[0..n-1] (32B each) || fees[0..n-1] (32B each)`.
+    ///         Decode via `EXTCODECOPY` — `PartyInfo` provides `denominators(pool)` and `fees(pool)`
+    ///         helpers, or off-chain callers can `eth_getCode` against this address directly.
+    function bfStore() external view returns (address);
 
     /// @notice Flash-loan fee in parts-per-million (ppm) applied to flash borrow amounts.
     function flashFeePpm() external view returns (uint256);

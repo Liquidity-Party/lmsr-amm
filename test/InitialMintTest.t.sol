@@ -98,7 +98,10 @@ contract InitialMintTest is Test {
         uint256[] memory zeroDeposits = new uint256[](3);
 
         vm.prank(planner.owner());
-        vm.expectRevert(bytes("insufficient balance"));
+        // Bases are now passed in DeployParams (= initialDeposits); zero entries fail
+        // PartyPoolExtraImpl.init's `require(p.bases[i] > 0, "zero base")` during
+        // pool construction, before initialMint is reached.
+        vm.expectRevert(bytes("zero base"));
         planner.newPool(
             "LP_ZERO", "LP_ZERO", tokens, kappa, 1000, 1000,
             address(this), address(this), zeroDeposits, 0, 0
@@ -125,7 +128,9 @@ contract InitialMintTest is Test {
         token1.approve(address(planner), INIT_BAL);
 
         vm.prank(planner.owner());
-        vm.expectRevert(bytes("insufficient balance"));
+        // Same as testInitialMint_requiresNonZeroBalances above: bases[2] = 0 is caught
+        // by PartyPoolExtraImpl.init's per-entry guard during construction.
+        vm.expectRevert(bytes("zero base"));
         planner.newPool(
             "LP_PARTIAL", "LP_PARTIAL", tokens, kappa, 1000, 1000,
             address(this), address(this), partialDeposits, 0, 0

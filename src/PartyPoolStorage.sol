@@ -8,6 +8,11 @@ import {LMSRStabilized} from "./LMSRStabilized.sol";
 /// @dev Mirror of PartyPool's sequential storage layout. Field order MUST match the C3-linearized
 ///      inheritance order: OwnableInternal → ERC20Internal → PartyPoolBase → PartyPool.
 ///      Verified against `forge inspect PartyPool storage-layout`.
+///
+///      `_fees` and `_bases` are NOT in storage — they live as immutable data inside an
+///      external "BFStore" data contract whose address is captured by the
+///      `IMMUTABLE_BFSTORE` immutable in `PartyPoolBase`. Library functions that need
+///      these values receive them as memory-array parameters built by the pool facade.
 struct PoolState {
     // ── OwnableInternal ───────────────────────────────── slots 0–1
     address _owner;
@@ -18,18 +23,16 @@ struct PoolState {
     uint256 _totalSupply;
     string _name;
     string _symbol;
-    // ── PartyPoolBase ────────────────────────────────── slots 7–16
+    // ── PartyPoolBase ────────────────────────────────── slots 7–14
     bytes32 _nonce;
-    uint256[] _fees;
     bool _killed;
-    bool _initialized;                                   // packed into slot 9 alongside _killed
-    LMSRStabilized.State _lmsr;                          // slots 10–11
+    bool _initialized;                                   // packed into slot 8 alongside _killed
+    LMSRStabilized.State _lmsr;                          // slots 9–10
     IERC20[] _tokens;
     uint256[] _protocolFeesOwed;
-    uint256[] _bases;
     mapping(IERC20 => uint256) _tokenAddressToIndexPlusOne;
     uint256[] _cachedUintBalances;
-    // ── PartyPool ─────────────────────────────────────── slot 17
+    // ── PartyPool ─────────────────────────────────────── slot 15
     address protocolFeeAddress;
 }
 

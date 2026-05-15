@@ -8,6 +8,7 @@ import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20
 import {Funding} from "../src/Funding.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
 import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {PartyInfo} from "../src/PartyInfo.sol";
 import {Deploy} from "./Deploy.sol";
 import {TestERC20} from "./TestHelpers.sol";
 
@@ -26,6 +27,7 @@ contract FeeGapMintFixTest is Test {
     TestERC20 token1;
     TestERC20 token2;
     IPartyPool pool;
+    PartyInfo info;
 
     address trader = address(0xBEEF);
     address minter = address(0xCAFE);
@@ -33,6 +35,7 @@ contract FeeGapMintFixTest is Test {
     uint256 constant INIT_BAL = 1_000_000;
 
     function setUp() public {
+        info = new PartyInfo();
         token0 = new TestERC20("T0", "T0", 0);
         token1 = new TestERC20("T1", "T1", 0);
         token2 = new TestERC20("T2", "T2", 0);
@@ -117,7 +120,7 @@ contract FeeGapMintFixTest is Test {
     ///      leave per-LP size unchanged (modulo rounding).
     function _perLpSizeInternal(uint256 supply) internal view returns (int128) {
         uint256[] memory cached = pool.balances();
-        uint256[] memory bases = pool.denominators();
+        uint256[] memory bases = info.denominators(pool);
         int128 acc;
         for (uint256 i = 0; i < cached.length; i++) {
             acc = ABDKMath64x64.add(acc, ABDKMath64x64.divu(cached[i], bases[i]));

@@ -26,6 +26,36 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
     }
 
     //
+    // BFStore decoders
+    //
+    // Both helpers are `public` so this contract's own quote/price methods can call them
+    // as plain functions (no external dispatch). External callers route through the
+    // generated public getters, which is the only place these arrays are needed off-chain
+    // now that `IPartyPool` no longer exposes `denominators()` / `fees()` directly.
+
+    /// @inheritdoc IPartyInfo
+    function denominators(IPartyPool pool) public view returns (uint256[] memory arr) {
+        uint256 n = pool.numTokens();
+        arr = new uint256[](n);
+        address store = pool.bfStore();
+        // slither-disable-next-line assembly
+        assembly ("memory-safe") {
+            extcodecopy(store, add(arr, 32), 1, mul(n, 32))
+        }
+    }
+
+    /// @inheritdoc IPartyInfo
+    function fees(IPartyPool pool) public view returns (uint256[] memory arr) {
+        uint256 n = pool.numTokens();
+        arr = new uint256[](n);
+        address store = pool.bfStore();
+        // slither-disable-next-line assembly
+        assembly ("memory-safe") {
+            extcodecopy(store, add(arr, 32), add(1, mul(n, 32)), mul(n, 32))
+        }
+    }
+
+    //
     // Current marginal prices
     //
 
@@ -36,7 +66,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         require(inputTokenIndex < nAssets && outputTokenIndex < nAssets, "price: idx");
         int128 p = LMSRStabilized.price(lmsr.kappa, lmsr.qInternal, inputTokenIndex, outputTokenIndex);
         require(p > 0, "price: non-positive");
-        uint256[] memory denoms = pool.denominators();
+        uint256[] memory denoms = denominators(pool);
         return (uint256(int256(p)) * denoms[outputTokenIndex] << 64) / denoms[inputTokenIndex];
     }
 
@@ -100,13 +130,13 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         uint256 nAssets = lmsr.qInternal.length;
         require(inputTokenIndex < nAssets && outputTokenIndex < nAssets, "swapAmounts: idx");
 
-        uint256[] memory poolFees = pool.fees();
+        uint256[] memory poolFees = fees(pool);
         uint256 feePpm;
         // Per-asset fees are < 10_000 (constructor invariant); sum cannot overflow.
         unchecked { feePpm = poolFees[inputTokenIndex] + poolFees[outputTokenIndex]; }
 
         (, uint256 netUintForSwap) = _computeFee(maxAmountIn, feePpm);
-        uint256[] memory bases = pool.denominators();
+        uint256[] memory bases = denominators(pool);
         uint256 baseI = bases[inputTokenIndex];
         int128 deltaInternalI = ABDKMath64x64.divu(netUintForSwap, baseI);
         require(deltaInternalI > int128(0), "too small");
@@ -146,7 +176,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         uint256 nAssets = lmsr.qInternal.length;
         require(inputTokenIndex < nAssets && outputTokenIndex < nAssets, "swapAmounts: idx");
 
-        uint256[] memory bases = pool.denominators();
+        uint256[] memory bases = denominators(pool);
         // Convert the desired output amount to internal Q64.64 units. Use a ceiling
         // conversion here so that any sub-base wei in `amountOut` rounds up — the
         // resulting kernel solve will then quote slightly more input than strictly
@@ -161,7 +191,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         amountIn = _internalToUintCeilPure(amountInInternal, baseI);
         require(amountIn > 0, "too small");
 
-        uint256[] memory poolFees = pool.fees();
+        uint256[] memory poolFees = fees(pool);
         uint256 feePpm;
         // Per-asset fees are < 10_000 (constructor invariant); sum cannot overflow.
         unchecked { feePpm = poolFees[inputTokenIndex] + poolFees[outputTokenIndex]; }
@@ -197,7 +227,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         require(inputTokenIndex < nAssets && outputTokenIndex < nAssets, "swapAmounts: idx");
         require(minPrice > 0, "swapAmounts: limit=0");
 
-        uint256[] memory bases = pool.denominators();
+        uint256[] memory bases = denominators(pool);
         uint256 dIn  = bases[inputTokenIndex];
         uint256 dOut = bases[outputTokenIndex];
         // Convert external Q128.128 denomination-adjusted price → internal Q64.64
@@ -244,7 +274,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
             unchecked { iter++; }
         }
 
-        uint256[] memory poolFees = pool.fees();
+        uint256[] memory poolFees = fees(pool);
         uint256 feePpm;
         // Per-asset fees are < 10_000 (constructor invariant); sum cannot overflow.
         unchecked { feePpm = poolFees[inputTokenIndex] + poolFees[outputTokenIndex]; }
@@ -262,7 +292,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
     function swapMintAmounts(IPartyPool pool, uint256 inputTokenIndex, uint256 lpAmountOut) external view
     returns (uint256 amountInUsed, uint256 inFee) {
         LMSRStabilized.State memory lmsr = pool.LMSR();
-        uint256[] memory bases_ = pool.denominators();
+        uint256[] memory bases_ = denominators(pool);
         // Use fee-inclusive cached balances so this quote matches swapMint() execution,
         // which prices against cached/base rather than the stale s._lmsr.qInternal.
         uint256[] memory cached = pool.balances();
@@ -273,7 +303,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         return PartyPoolMintImpl.swapMintAmounts(
             inputTokenIndex,
             lpAmountOut,
-            pool.fees()[inputTokenIndex],
+            fees(pool)[inputTokenIndex],
             lmsr,
             bases_,
             pool.totalSupply()
@@ -289,9 +319,9 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         require(maxAmountIn > 0, "invalid amount");
         uint256 supply = pool.totalSupply();
         require(supply > 0, "uninitialized");
-        uint256 feePpm = pool.fees()[inputTokenIndex];
+        uint256 feePpm = fees(pool)[inputTokenIndex];
         LMSRStabilized.State memory lmsr = pool.LMSR();
-        uint256[] memory bases_ = pool.denominators();
+        uint256[] memory bases_ = denominators(pool);
         // Use fee-inclusive cached balances so bisection quotes match swapMint() execution.
         uint256[] memory cached = pool.balances();
         uint256 n = bases_.length;
@@ -383,7 +413,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
     function burnSwapAmounts(IPartyPool pool, uint256 lpAmount, uint256 outputTokenIndex) external view
     returns (uint256 amountOut, uint256 outFee) {
         LMSRStabilized.State memory lmsr = pool.LMSR();
-        uint256[] memory bases_ = pool.denominators();
+        uint256[] memory bases_ = denominators(pool);
         // Use fee-inclusive cached balances so this quote matches burnSwap() execution,
         // which prices against cached/base rather than the stale s._lmsr.qInternal.
         uint256[] memory cached = pool.balances();
@@ -394,7 +424,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         return PartyPoolMintImpl.burnSwapAmounts(
             lpAmount,
             outputTokenIndex,
-            pool.fees()[outputTokenIndex],
+            fees(pool)[outputTokenIndex],
             lmsr,
             bases_,
             pool.totalSupply()

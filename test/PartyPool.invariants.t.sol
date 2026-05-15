@@ -109,7 +109,7 @@ contract PartyPoolInvariantHandler is CommonBase, StdCheats, StdUtils, StdAssert
         vm.stopPrank();
 
         // I-12: LP portion of fee must be > 0 whenever feePpm > 0 and output > 0.
-        uint256[] memory feesArr = pool.fees();
+        uint256[] memory feesArr = info.fees(pool);
         if (amountOut > 0 && feesArr[inputIdx] + feesArr[outputIdx] > 0) {
             uint256 protoShare = (inFee * pool.protocolFeePpm()) / 1_000_000;
             if (inFee > protoShare && inFee - protoShare == 0) ghost_I12Violated = true;
@@ -190,7 +190,7 @@ contract PartyPoolInvariantHandler is CommonBase, StdCheats, StdUtils, StdAssert
         vm.stopPrank();
 
         // I-12 for swapMint (input-side fee).
-        if (lpMinted > 0 && pool.fees()[inputIdx] > 0) {
+        if (lpMinted > 0 && info.fees(pool)[inputIdx] > 0) {
             if (inFee == 0) ghost_I12Violated = true;
             else {
                 uint256 protoShare = (inFee * pool.protocolFeePpm()) / 1_000_000;
@@ -221,7 +221,7 @@ contract PartyPoolInvariantHandler is CommonBase, StdCheats, StdUtils, StdAssert
         (, uint256 outFee) = pool.burnSwap(actor, actor, lpAmount, outputIdx, 0, 0, false);
 
         // I-12 for burnSwap (output-side fee).
-        if (outFee > 0 && pool.fees()[outputIdx] > 0) {
+        if (outFee > 0 && info.fees(pool)[outputIdx] > 0) {
             uint256 protoShare = (outFee * pool.protocolFeePpm()) / 1_000_000;
             if (outFee - protoShare == 0) ghost_I12Violated = true;
         }
@@ -814,7 +814,7 @@ contract PartyPoolInvariantsTest is StdInvariant, Test {
         if (pool.totalSupply() == 0) return;
 
         uint256[] memory bals = pool.balances();
-        uint256[] memory feesArr = pool.fees();
+        uint256[] memory feesArr = info.fees(pool);
         for (uint256 i = 0; i < n; i++) {
             uint256 poolBal = bals[i];
             if (poolBal == 0) continue;

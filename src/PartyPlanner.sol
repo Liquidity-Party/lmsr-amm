@@ -129,6 +129,9 @@ contract PartyPlanner is PartyPoolDeployer, OwnableExternal, IPartyPlanner {
         require(swapFeesPpm_.length == tokens_.length, "Planner: fees and tokens length mismatch");
 
         // Create a new PartyPool instance (kappa-based constructor)
+        // `initialDeposits` is forwarded as the pool's immutable `bases` (per-token
+        // denominators). The pool encodes bases/fees into an SSTORE2 data contract in
+        // its constructor; from that point on, reads avoid SLOAD on the hot paths.
         IPartyPoolDeployer.DeployParams memory deployParams = IPartyPoolDeployer.DeployParams(
             0, // This is set by the deployer
             _owner, // Same owner as this PartyPlanner
@@ -137,6 +140,7 @@ contract PartyPlanner is PartyPoolDeployer, OwnableExternal, IPartyPlanner {
             tokens_,
             kappa_,
             swapFeesPpm_,
+            initialDeposits,
             flashFeePpm_,
             protocolFeePpm,
             protocolFeeAddress,

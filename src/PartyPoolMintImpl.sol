@@ -161,9 +161,11 @@ library PartyPoolMintImpl {
 
     // KAPPA is upper-case to match the caller's immutable slot (PartyPool), which this
     // library is called from via delegatecall. n is bounded by the deployer so the
-    // per-asset balanceOf loop is not externally inducible.
+    // per-asset balanceOf loop is not externally inducible. `bases` is the per-token
+    // immutable denominator vector, passed from PartyPool's `_basesArray()` (sourced
+    // from the BFStore data contract).
     // slither-disable-next-line naming-convention,calls-loop
-    function initialMint(address receiver, uint256 lpTokens, int128 KAPPA) external
+    function initialMint(address receiver, uint256 lpTokens, int128 KAPPA, uint256[] memory bases) external
     returns (uint256 lpMinted) {
         PoolState storage s = _ps();
         uint256 n = s._tokens.length;
@@ -175,13 +177,17 @@ library PartyPoolMintImpl {
 
         for (uint i = 0; i < n; ) {
             uint256 bal = IERC20(s._tokens[i]).balanceOf(address(this));
-            require(bal > 0, "insufficient balance");
+            // Bases are immutable (set at construction from `initialDeposits`). The pool
+            // requires at least the declared base for each token to be present; any excess
+            // (e.g. from a pre-deploy donation to the CREATE2 address) is accepted and
+            // gifted to the first LP via `q > 1.0`. This preserves the J.6 anti-grief
+            // property — a 1-wei donation cannot revert initialMint.
+            require(bal >= bases[i], "insufficient balance");
             depositAmounts[i] = bal;
 
             s._cachedUintBalances[i] = bal;
-            s._bases[i] = bal;
 
-            newQInternal[i] = ABDKMath64x64.divu(bal, s._bases[i]);
+            newQInternal[i] = ABDKMath64x64.divu(bal, bases[i]);
             require(newQInternal[i] > int128(0), "insufficient balance");
 
             unchecked { i++; }
@@ -213,7 +219,8 @@ library PartyPoolMintImpl {
         uint256 deadline,
         bytes memory cbData,
         NativeWrapper wrapper,
-        IPermit2 permit2
+        IPermit2 permit2,
+        uint256[] memory bases
     ) external returns (uint256 lpMinted) {
         PoolState storage s = _ps();
         // slither-disable-next-line timestamp
@@ -228,7 +235,7 @@ library PartyPoolMintImpl {
         // incumbent LPs.
         int128[] memory oldFromCached = new int128[](n);
         for (uint i = 0; i < n; ) {
-            oldFromCached[i] = ABDKMath64x64.divu(s._cachedUintBalances[i], s._bases[i]);
+            oldFromCached[i] = ABDKMath64x64.divu(s._cachedUintBalances[i], bases[i]);
             unchecked { i++; }
         }
         int128 oldTotal = _libComputeSizeMetric(oldFromCached);
@@ -249,7 +256,7 @@ library PartyPoolMintImpl {
                     unchecked {
                         uint256 newBal = s._cachedUintBalances[i] + depositAmounts[i];
                         s._cachedUintBalances[i] = newBal;
-                        newQInternal[i] = ABDKMath64x64.divu(newBal, s._bases[i]);
+                        newQInternal[i] = ABDKMath64x64.divu(newBal, bases[i]);
                     }
                 }
                 unchecked { i++; }
@@ -270,7 +277,7 @@ library PartyPoolMintImpl {
                     unchecked {
                         uint256 cached = s._cachedUintBalances[i];
                         s._cachedUintBalances[i] = cached + received;
-                        newQInternal[i] = ABDKMath64x64.divu(cached + amount, s._bases[i]);
+                        newQInternal[i] = ABDKMath64x64.divu(cached + amount, bases[i]);
                     }
                 }
                 unchecked { i++; }
@@ -308,7 +315,8 @@ library PartyPoolMintImpl {
         uint256 lpAmount,
         uint256 deadline,
         bool unwrap,
-        NativeWrapper wrapper
+        NativeWrapper wrapper,
+        uint256[] memory bases
     ) external returns (uint256[] memory withdrawAmounts) {
         PoolState storage s = _ps();
         // slither-disable-next-line timestamp
@@ -329,7 +337,7 @@ library PartyPoolMintImpl {
                 _sendTokenTo(s._tokens[i], receiver, amount, unwrap, wrapper);
                 uint256 newBal = s._cachedUintBalances[i] - amount;
                 s._cachedUintBalances[i] = newBal;
-                newQInternal[i] = ABDKMath64x64.divu(newBal, s._bases[i]);
+                newQInternal[i] = ABDKMath64x64.divu(newBal, bases[i]);
                 if (newQInternal[i] != int128(0))
                     allZero = false;
             }
@@ -451,7 +459,8 @@ library PartyPoolMintImpl {
         uint256 swapFeePpm,
         uint256 protocolFeePpm,
         NativeWrapper wrapper,
-        IPermit2 permit2
+        IPermit2 permit2,
+        uint256[] memory bases
     ) external returns (uint256 amountIn, uint256 lpMinted, uint256 inFee) {
         PoolState storage s = _ps();
         uint256 n = s._tokens.length;
@@ -475,14 +484,14 @@ library PartyPoolMintImpl {
         // γ LP for less input than is fair, diluting incumbent LPs.
         int128[] memory qFromCached = new int128[](n);
         for (uint256 idx = 0; idx < n; ) {
-            qFromCached[idx] = ABDKMath64x64.divu(s._cachedUintBalances[idx], s._bases[idx]);
+            qFromCached[idx] = ABDKMath64x64.divu(s._cachedUintBalances[idx], bases[idx]);
             unchecked { idx++; }
         }
         int128 amountInInternal = LMSRStabilized.swapAmountsForMint(
             s._lmsr.kappa, qFromCached, inputTokenIndex, beta
         );
 
-        uint256 amountInUsed = _libInternalToUintCeilPure(amountInInternal, s._bases[inputTokenIndex]);
+        uint256 amountInUsed = _libInternalToUintCeilPure(amountInInternal, bases[inputTokenIndex]);
         require(amountInUsed > 0, "too small");
 
         inFee = _libCeilFee(amountInUsed, swapFeePpm);
@@ -527,7 +536,7 @@ library PartyPoolMintImpl {
         // which is what blocked burnSwap on those assets (audit finding M-1).
         int128[] memory newQInternal = new int128[](n);
         for (uint256 idx = 0; idx < n; idx++) {
-            newQInternal[idx] = ABDKMath64x64.divu(s._cachedUintBalances[idx], s._bases[idx]);
+            newQInternal[idx] = ABDKMath64x64.divu(s._cachedUintBalances[idx], bases[idx]);
         }
         s._lmsr.updateForProportionalChange(newQInternal);
 
@@ -582,7 +591,8 @@ library PartyPoolMintImpl {
         bool unwrap,
         uint256 swapFeePpm,
         uint256 protocolFeePpm,
-        NativeWrapper wrapper
+        NativeWrapper wrapper,
+        uint256[] memory bases
     ) external returns (uint256 amountOut, uint256 outFee) {
         PoolState storage s = _ps();
         uint256 n = s._tokens.length;
@@ -603,7 +613,7 @@ library PartyPoolMintImpl {
         // are entitled to via their LP share).
         int128[] memory qFromCached = new int128[](n);
         for (uint256 idx = 0; idx < n; ) {
-            qFromCached[idx] = ABDKMath64x64.divu(s._cachedUintBalances[idx], s._bases[idx]);
+            qFromCached[idx] = ABDKMath64x64.divu(s._cachedUintBalances[idx], bases[idx]);
             unchecked { idx++; }
         }
         // Only payoutInternal is needed in this branch.
@@ -612,7 +622,7 @@ library PartyPoolMintImpl {
             s._lmsr.kappa, qFromCached, outputTokenIndex, alpha
         );
 
-        uint256 payoutGrossUint = ABDKMath64x64.mulu(payoutInternal, s._bases[outputTokenIndex]);
+        uint256 payoutGrossUint = ABDKMath64x64.mulu(payoutInternal, bases[outputTokenIndex]);
         (outFee,) = _libComputeFee(payoutGrossUint, swapFeePpm);
         require(payoutGrossUint > outFee, "burnSwapAmounts: output zero");
         unchecked { amountOut = payoutGrossUint - outFee; } // guarded by require above
@@ -654,7 +664,7 @@ library PartyPoolMintImpl {
                 unchecked { newBal = newBal - amountOut - protoShare; }
                 s._cachedUintBalances[idx] = newBal;
             }
-            newQInternal[idx] = ABDKMath64x64.divu(newBal, s._bases[idx]);
+            newQInternal[idx] = ABDKMath64x64.divu(newBal, bases[idx]);
         }
 
         bool allZero = true;

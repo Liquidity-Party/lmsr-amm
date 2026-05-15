@@ -5,6 +5,7 @@ import {ABDKMath64x64} from "../lib/abdk-libraries-solidity/ABDKMath64x64.sol";
 import {Test} from "../lib/forge-std/src/Test.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
+import {PartyInfo} from "../src/PartyInfo.sol";
 import {Deploy} from "./Deploy.sol";
 import {MockERC20} from "./MockERC20.sol";
 
@@ -21,10 +22,12 @@ import {MockERC20} from "./MockERC20.sol";
 ///   C3-linearised slot order; reordering any base would silently shift slots and corrupt
 ///   state. Every test in this contract pins one named slot, so any future inheritance
 ///   reorder fails CI before it ships.
-/// CHECKLIST: G.5 — initialisation audit. `_killed` (slot 9, byte 0) is asserted false at
-///   construction (test_slot9_killed_read_false); `_initialized` (slot 9, byte 1) is asserted
-///   true post-`init` (test_slot9_initialized_read_true); _tokens, _bases, _fees,
-///   _cachedUintBalances, _protocolFeesOwed (slots 12–17) are asserted non-empty post-`init`.
+/// CHECKLIST: G.5 — initialisation audit. `_killed` (slot 8, byte 0) is asserted false at
+///   construction (test_slot8_killed_read_false); `_initialized` (slot 8, byte 1) is asserted
+///   true post-`init` (test_slot8_initialized_read_true); _tokens, _cachedUintBalances,
+///   _protocolFeesOwed are asserted non-empty post-`init`. Bases and fees are no longer in
+///   storage — they live in the BFStore data contract pointed to by
+///   `IMMUTABLE_BFSTORE` and are checked via the `denominators()` / `fees()` viewers.
 ///   This proves PartyPoolExtraImpl.init runs through delegatecall and writes every storage
 ///   variable that the hot path reads.
 ///
@@ -37,24 +40,24 @@ import {MockERC20} from "./MockERC20.sol";
 ///   slot  5  _name                   (string)
 ///   slot  6  _symbol                 (string)
 ///   slot  7  _nonce                  (bytes32)
-///   slot  8  _fees                   (uint256[])
-///   slot  9  _killed                 (bool, byte 0)
+///   slot  8  _killed                 (bool, byte 0)
 ///            _initialized            (bool, byte 1; packed with _killed)
-///   slot 10  _lmsr.kappa             (int128, low 128 bits)
-///   slot 11  _lmsr.qInternal.length  (uint256)
-///   slot 12  _tokens                 (IERC20[])
-///   slot 13  _protocolFeesOwed       (uint256[])
-///   slot 14  _bases                  (uint256[])
-///   slot 15  _tokenAddressToIndexPlusOne  (mapping)
-///   slot 16  _cachedUintBalances     (uint256[])
-///   slot 17  protocolFeeAddress      (address)
+///   slot  9  _lmsr.kappa             (int128, low 128 bits)
+///   slot 10  _lmsr.qInternal.length  (uint256)
+///   slot 11  _tokens                 (IERC20[])
+///   slot 12  _protocolFeesOwed       (uint256[])
+///   slot 13  _tokenAddressToIndexPlusOne  (mapping)
+///   slot 14  _cachedUintBalances     (uint256[])
+///   slot 15  protocolFeeAddress      (address)
 contract StorageLayoutTest is Test {
     uint256 constant N = 3;
 
     IPartyPool pool;
+    PartyInfo info;
     address self;
 
     function setUp() public {
+        info = new PartyInfo();
         self = address(this);
         MockERC20 t0 = new MockERC20("TokenA", "A", 6);
         MockERC20 t1 = new MockERC20("TokenB", "B", 8);
@@ -133,74 +136,57 @@ contract StorageLayoutTest is Test {
         assertEq(pool.balanceOf(alice), amount);
     }
 
-    // ── Slot 8: _fees array ───────────────────────────────────────────────────
+    // ── Slot 8: _killed (byte 0) + _initialized (byte 1) ──────────────────────
 
-    function test_slot8_fees_length() public view {
-        uint256 len = uint256(vm.load(address(pool), bytes32(uint256(8))));
-        assertEq(len, N);
-        assertEq(len, pool.fees().length);
-    }
-
-    function test_slot8_fees_elements() public view {
-        uint256[] memory poolFees = pool.fees();
-        bytes32 dataSlot = keccak256(abi.encode(uint256(8)));
-        for (uint256 i = 0; i < N; i++) {
-            uint256 raw = uint256(vm.load(address(pool), bytes32(uint256(dataSlot) + i)));
-            assertEq(raw, poolFees[i]);
-        }
-    }
-
-    // ── Slot 9: _killed (byte 0) + _initialized (byte 1) ──────────────────────
-
-    function test_slot9_killed_read_false() public view {
-        uint256 raw = uint256(vm.load(address(pool), bytes32(uint256(9))));
+    function test_slot8_killed_read_false() public view {
+        uint256 raw = uint256(vm.load(address(pool), bytes32(uint256(8))));
         assertEq(raw & 0xff, 0);          // _killed at byte 0 is false
         assertFalse(pool.killed());
     }
 
-    function test_slot9_killed_writeThrough() public {
+    function test_slot8_killed_writeThrough() public {
         assertFalse(pool.killed());
         // Preserve byte 1+ (_initialized) across the writes.
-        uint256 keep = uint256(vm.load(address(pool), bytes32(uint256(9)))) & ~uint256(0xff);
-        vm.store(address(pool), bytes32(uint256(9)), bytes32(keep | 1));
+        uint256 keep = uint256(vm.load(address(pool), bytes32(uint256(8)))) & ~uint256(0xff);
+        vm.store(address(pool), bytes32(uint256(8)), bytes32(keep | 1));
         assertTrue(pool.killed());
-        vm.store(address(pool), bytes32(uint256(9)), bytes32(keep));
+        vm.store(address(pool), bytes32(uint256(8)), bytes32(keep));
         assertFalse(pool.killed());
     }
 
-    function test_slot9_initialized_read_true() public view {
-        uint256 raw = uint256(vm.load(address(pool), bytes32(uint256(9))));
+    function test_slot8_initialized_read_true() public view {
+        uint256 raw = uint256(vm.load(address(pool), bytes32(uint256(8))));
         assertEq((raw >> 8) & 0xff, 1);   // _initialized at byte 1 is true after setUp
     }
 
-    // ── Slot 10: _lmsr.kappa ─────────────────────────────────────────────────
+    // ── Slot 9: _lmsr.kappa ──────────────────────────────────────────────────
 
-    function test_slot10_lmsr_kappa_read() public view {
-        bytes32 raw = vm.load(address(pool), bytes32(uint256(10)));
+    function test_slot9_lmsr_kappa_read() public view {
+        bytes32 raw = vm.load(address(pool), bytes32(uint256(9)));
         // kappa is packed in the low 128 bits of the slot
         int128 kappa = int128(uint128(uint256(raw)));
         assertEq(kappa, pool.LMSR().kappa);
         assertGt(kappa, 0);
     }
 
-    // ── Slot 11: _lmsr.qInternal array length ────────────────────────────────
+    // ── Slot 10: _lmsr.qInternal array length ────────────────────────────────
 
-    function test_slot11_lmsr_qInternal_length() public view {
-        uint256 len = uint256(vm.load(address(pool), bytes32(uint256(11))));
+    function test_slot10_lmsr_qInternal_length() public view {
+        uint256 len = uint256(vm.load(address(pool), bytes32(uint256(10))));
         assertEq(len, N);
         assertEq(len, pool.LMSR().qInternal.length);
     }
 
-    // ── Slot 12: _tokens array ────────────────────────────────────────────────
+    // ── Slot 11: _tokens array ────────────────────────────────────────────────
 
-    function test_slot12_tokens_length() public view {
-        uint256 len = uint256(vm.load(address(pool), bytes32(uint256(12))));
+    function test_slot11_tokens_length() public view {
+        uint256 len = uint256(vm.load(address(pool), bytes32(uint256(11))));
         assertEq(len, N);
         assertEq(len, pool.numTokens());
     }
 
-    function test_slot12_tokens_elements() public view {
-        bytes32 dataSlot = keccak256(abi.encode(uint256(12)));
+    function test_slot11_tokens_elements() public view {
+        bytes32 dataSlot = keccak256(abi.encode(uint256(11)));
         for (uint256 i = 0; i < N; i++) {
             bytes32 raw = vm.load(address(pool), bytes32(uint256(dataSlot) + i));
             address tokenAddr = address(uint160(uint256(raw)));
@@ -208,35 +194,45 @@ contract StorageLayoutTest is Test {
         }
     }
 
-    // ── Slot 14: _bases array ─────────────────────────────────────────────────
+    // ── Bases / fees: not in storage; live in the BFStore data contract ───────
+    // Verify the PartyInfo decoders round-trip via the pool's `bfStore()` getter
+    // and have the expected length. The BFStore address is captured by
+    // PartyPool's `IMMUTABLE_BFSTORE` immutable; off-chain readers and the
+    // `PartyInfo.denominators(pool)` / `PartyInfo.fees(pool)` helpers exercise
+    // the EXTCODECOPY decode path end-to-end.
 
-    function test_slot14_bases_length() public view {
-        uint256 len = uint256(vm.load(address(pool), bytes32(uint256(14))));
-        assertEq(len, N);
-        assertEq(len, pool.denominators().length);
+    function test_bfstore_address_nonzero() public view {
+        assertTrue(pool.bfStore() != address(0), "bfStore must be deployed");
     }
 
-    function test_slot14_bases_elements() public view {
-        uint256[] memory denoms = pool.denominators();
-        bytes32 dataSlot = keccak256(abi.encode(uint256(14)));
+    function test_bfstore_denominators_length_and_value() public view {
+        uint256[] memory denoms = info.denominators(pool);
+        assertEq(denoms.length, N);
         for (uint256 i = 0; i < N; i++) {
-            uint256 raw = uint256(vm.load(address(pool), bytes32(uint256(dataSlot) + i)));
-            assertEq(raw, denoms[i]);
+            assertGt(denoms[i], 0, "base must be non-zero");
         }
     }
 
-    // ── Slot 17: protocolFeeAddress ───────────────────────────────────────────
+    function test_bfstore_fees_length_and_value() public view {
+        uint256[] memory poolFees = info.fees(pool);
+        assertEq(poolFees.length, N);
+        for (uint256 i = 0; i < N; i++) {
+            assertLt(poolFees[i], 10_000, "fee must be < 1%");
+        }
+    }
 
-    function test_slot17_protocolFeeAddress_read() public view {
-        bytes32 raw = vm.load(address(pool), bytes32(uint256(17)));
+    // ── Slot 15: protocolFeeAddress ───────────────────────────────────────────
+
+    function test_slot15_protocolFeeAddress_read() public view {
+        bytes32 raw = vm.load(address(pool), bytes32(uint256(15)));
         address feeAddr = address(uint160(uint256(raw)));
         assertEq(feeAddr, pool.protocolFeeAddress());
         assertEq(feeAddr, Deploy.PROTOCOL_FEE_RECEIVER);
     }
 
-    function test_slot17_protocolFeeAddress_writeThrough() public {
+    function test_slot15_protocolFeeAddress_writeThrough() public {
         address newFeeAddr = address(0xFEE5);
-        vm.store(address(pool), bytes32(uint256(17)), bytes32(uint256(uint160(newFeeAddr))));
+        vm.store(address(pool), bytes32(uint256(15)), bytes32(uint256(uint160(newFeeAddr))));
         assertEq(pool.protocolFeeAddress(), newFeeAddr);
     }
 }

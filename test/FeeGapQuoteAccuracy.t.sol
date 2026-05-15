@@ -20,7 +20,7 @@ import {TestERC20} from "./TestHelpers.sol";
 ///
 ///         Fix: PartyInfo.swapMintAmounts, burnSwapAmounts, and maxLpForBudget
 ///         now override lmsr.qInternal with fee-inclusive values derived from
-///         pool.balances() / pool.denominators() before passing to the pure
+///         pool.balances() / denominators(pool) before passing to the pure
 ///         library functions — matching the approach in swapMint and burnSwap.
 ///
 ///         These tests assert that quoted amounts match executed amounts within

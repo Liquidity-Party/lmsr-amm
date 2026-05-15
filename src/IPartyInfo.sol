@@ -6,8 +6,9 @@ import {IPartyPool} from "./IPartyPool.sol";
 /// @title IPartyInfo — Read-only view helpers for PartyPool
 /// @notice Provides prices, quotes, and swap-amount helpers.
 /// @dev **Not safe as a same-transaction price oracle.** Every getter on this interface
-///      derives its result from `IPartyPool` view state (`balances`, `LMSR`, `denominators`,
-///      `_protocolFeesOwed`) without read-only-reentrancy protection. An integrator that reads
+///      derives its result from `IPartyPool` view state (`balances`, `LMSR`, the BFStore
+///      pointed at by `bfStore()`, `_protocolFeesOwed`) without read-only-reentrancy protection.
+///      An integrator that reads
 ///      these values from inside a token callback (ERC777, ERC677, custom hook) or any other
 ///      mid-transaction callback path will observe inconsistent values. Treat the prices and
 ///      quotes returned here as point-in-time, off-chain–consumable data. For on-chain pricing,
@@ -20,13 +21,28 @@ interface IPartyInfo {
     function working(IPartyPool pool) external view returns (bool);
 
     // -------------------------------------------------------------------------
+    // BFStore decoders (per-token bases and per-asset fees)
+    // -------------------------------------------------------------------------
+
+    /// @notice Per-token uint base denominators used to convert uint token amounts ↔ internal Q64.64.
+    /// @dev    Decodes the BFStore data contract pointed at by `pool.bfStore()` via `EXTCODECOPY`.
+    ///         Equivalent to `pool.denominators()` in the previous interface; moved here so that
+    ///         PartyPool's deployed bytecode stays within EIP-170.
+    function denominators(IPartyPool pool) external view returns (uint256[] memory);
+
+    /// @notice Per-asset swap fees in ppm. For asset-to-asset swaps, the effective pair fee is the
+    ///         sum of the two asset fees (each < 10,000 by constructor invariant).
+    /// @dev    Decodes the BFStore data contract pointed at by `pool.bfStore()` via `EXTCODECOPY`.
+    function fees(IPartyPool pool) external view returns (uint256[] memory);
+
+    // -------------------------------------------------------------------------
     // Prices
     // -------------------------------------------------------------------------
 
     /// @notice Infinitesimal marginal exchange rate for a swap input→output as Q128.128,
     ///         denomination-adjusted to external token units.
     /// @dev Computed as `exp((q[output] − q[input]) / b) × D[output] / D[input]` where
-    ///      `b = κ · Σq` and `D[k] = pool.denominators()[k]`.
+    ///      `b = κ · Σq` and `D[k] = denominators(pool)[k]`.
     ///      Fee-free and infinitesimal — actual average rate for a finite swap will be worse.
     ///      On a balanced pool with equal denominators this returns exactly `1 << 128`.
     /// @param inputTokenIndex  index of the token being sold

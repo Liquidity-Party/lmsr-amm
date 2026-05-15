@@ -24,6 +24,10 @@ interface IPartyPoolDeployer {
         int128 kappa;
         /// @notice Per-asset swap fees in ppm (length must equal tokens.length)
         uint256[] fees;
+        /// @notice Per-token uint base denominators (length must equal tokens.length). Used to scale
+        ///         token amounts to/from the internal Q64.64 representation. Typically set equal to
+        ///         the initial deposit amount for each token; immutable after pool construction.
+        uint256[] bases;
         /// @notice Fee in parts-per-million, taken for flash loans
         uint256 flashFeePpm;
         /// @notice Protocol fee in parts-per-million

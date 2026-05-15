@@ -36,12 +36,19 @@ abstract contract PartyPoolBase is OwnableInternal, ERC20Internal, ReentrancyGua
     // slither-disable-next-line naming-convention
     IPermit2 internal immutable PERMIT2;
 
-    /// @notice Per-asset swap fees in ppm. Fees are applied on input for swaps; see helpers for composition rules.
-    // Initialized in PartyPoolExtraImpl.init via delegatecall (shared PoolState storage
-    // layout in PartyPoolStorage.sol); slither does not follow the library/delegatecall
-    // handoff and reports it as never initialized.
-    // slither-disable-next-line uninitialized-state
-    uint256[] internal _fees;
+    /// @notice Address of the "BFStore" data contract that holds per-token bases and per-asset
+    ///         fees as deployed bytecode (SSTORE2 idiom). Layout of the deployed bytecode:
+    ///         `0x00 STOP || bases[0..n-1] (32B each) || fees[0..n-1] (32B each)`.
+    ///         Set in `PartyPool`'s constructor; read via `EXTCODECOPY` by the `_baseAt` /
+    ///         `_feeAt` / `_basesArray` / `_feesArray` helpers below. Replaces the previous
+    ///         `_fees` and `_bases` storage arrays.
+    // slither-disable-next-line naming-convention
+    address internal immutable IMMUTABLE_BFSTORE;
+
+    /// @notice Number of tokens in the pool — immutable after construction. Lives in PartyPoolBase
+    ///         (not PartyPool) so the EXTCODECOPY helpers below can read it without a virtual call.
+    // slither-disable-next-line naming-convention
+    uint256 internal immutable NUM_TOKENS;
 
     //
     // Internal state
@@ -71,12 +78,6 @@ abstract contract PartyPoolBase is OwnableInternal, ERC20Internal, ReentrancyGua
     // Same delegatecall-init rationale as _fees (see above).
     // slither-disable-next-line uninitialized-state
     uint256[] internal _protocolFeesOwed;
-
-    /// @notice Per-token uint base denominators used to convert uint token amounts <-> internal Q64.64 representation.
-    /// @dev denominators()[i] is the base for _tokens[i]. These _bases are chosen by deployer and must match token decimals.
-    // Same delegatecall-init rationale as _fees (see above).
-    // slither-disable-next-line uninitialized-state
-    uint256[] internal _bases; // per-token uint base used to scale token amounts <-> internal
 
     /// @notice Mapping from token address => (index+1). A zero value indicates the token is not in the pool.
     /// @dev Use index = _tokenAddressToIndexPlusOne[token] - 1 when non-zero.
@@ -147,11 +148,6 @@ abstract contract PartyPoolBase is OwnableInternal, ERC20Internal, ReentrancyGua
         return IERC20(address(uint160(_arrLoad(s, i))));
     }
 
-    function _baseAt(uint256 i) internal view returns (uint256) {
-        uint256 s; assembly { s := _bases.slot }
-        return _arrLoad(s, i);
-    }
-
     function _cachedBalAt(uint256 i) internal view returns (uint256) {
         uint256 s; assembly { s := _cachedUintBalances.slot }
         return _arrLoad(s, i);
@@ -172,9 +168,41 @@ abstract contract PartyPoolBase is OwnableInternal, ERC20Internal, ReentrancyGua
         _arrStore(s, i, val);
     }
 
-    function _feeAt(uint256 i) internal view returns (uint256) {
-        uint256 s; assembly { s := _fees.slot }
-        return _arrLoad(s, i);
+    /* ----------------------
+       BFStore (bases + fees) accessors — EXTCODECOPY-backed
+       ----------------------
+       The BFStore contract's deployed bytecode is:
+         byte 0:                STOP (0x00) — prevents accidental call execution
+         bytes 1..1+32n-1:      bases (uint256, big-endian, one slot per token)
+         bytes 1+32n..1+64n-1:  fees  (uint256, big-endian, one slot per token)
+       where n == NUM_TOKENS. Single-element reads target scratch memory (0x00..0x40),
+       which is safe to clobber per Solidity's memory model. Full-array builders
+       allocate fresh memory arrays and bulk-copy into them. */
+
+    function _baseAt(uint256 i) internal view returns (uint256 v) {
+        address store = IMMUTABLE_BFSTORE;
+        assembly ("memory-safe") {
+            extcodecopy(store, 0x00, add(1, mul(i, 32)), 32)
+            v := mload(0x00)
+        }
+    }
+
+    function _feeAt(uint256 i) internal view returns (uint256 v) {
+        address store = IMMUTABLE_BFSTORE;
+        uint256 feesBase = 1 + 32 * NUM_TOKENS;
+        assembly ("memory-safe") {
+            extcodecopy(store, 0x00, add(feesBase, mul(i, 32)), 32)
+            v := mload(0x00)
+        }
+    }
+
+    function _basesArray() internal view returns (uint256[] memory arr) {
+        uint256 n = NUM_TOKENS;
+        arr = new uint256[](n);
+        address store = IMMUTABLE_BFSTORE;
+        assembly ("memory-safe") {
+            extcodecopy(store, add(arr, 32), 1, mul(n, 32))
+        }
     }
     // slither-disable-end assembly
 
@@ -182,25 +210,11 @@ abstract contract PartyPoolBase is OwnableInternal, ERC20Internal, ReentrancyGua
        Conversion & fee helpers (internal)
        ---------------------- */
 
-    // Per-asset fee getter. Constructor always allocates _fees to length n>1, so
-    // the array is never empty at runtime; bypass the bounds-check via _feeAt.
-    function _assetFeePpm(uint256 i) internal view returns (uint256) {
-        return _feeAt(i);
-    }
-
-    // Effective pair fee: 1 - (1-fi)(1-fj) in ppm, rounding in favor of the pool, and guarding
-    // overflows by using 1e6 ppm base.
-    // We implement this as: ceil( fi + fj - (fi*fj)/1e6 ) for the real-valued expression.
-    // For integer arithmetic with fi,fj in ppm this is equal to: fi + fj - floor( (fi*fj)/1e6 ).
-    // So we compute prod = fi * fj, prodDiv = prod / 1e6 (floor), and return fi + fj - prodDiv.
+    // Effective pair fee for an i→j swap. Each asset fee is bounded < 10_000 (constructor
+    // invariant), so the additive sum is < 20_000 — no overflow possible. The exact (1-fi)(1-fj)
+    // formula was rejected during the audit pass in favor of the simpler additive composition.
     function _pairFeePpmView(uint256 i, uint256 j) internal view returns (uint256) {
-        uint256 fi = _feeAt(i);
-        uint256 fj = _feeAt(j);
-        // multiplicative combination, while mathematically correct, is more confusing to users
-        // return fi + fj - fi * fj / 1_000_000;
-        // additive fees are easy to understand and very very close to the multiplicative combination.
-        // fi, fj each < 10_000 (constructor invariant), so fi + fj < 20_000 — no overflow possible
-        unchecked { return fi + fj; }
+        unchecked { return _feeAt(i) + _feeAt(j); }
     }
 
     /* ----------------------
