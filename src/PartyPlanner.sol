@@ -107,7 +107,6 @@ contract PartyPlanner is PartyPoolDeployer, OwnableExternal, IPartyPlanner {
         int128 kappa_,
         uint256[] memory swapFeesPpm_,
         uint256 flashFeePpm_,
-        int128 anchorLogWeight_,
         // Initial deposit information
         address payer,
         address receiver,
@@ -126,10 +125,6 @@ contract PartyPlanner is PartyPoolDeployer, OwnableExternal, IPartyPlanner {
         // Validate kappa > 0 (Q64.64)
         require(kappa_ > int128(0), "Planner: kappa must be > 0");
 
-        // anchorLogWeight ≥ 0: downweighting slot 0 is unsupported (would reduce slot-0
-        // price share below the unweighted equilibrium, the opposite of the intended use).
-        require(anchorLogWeight_ >= int128(0), "Planner: anchorLogWeight < 0");
-
         // Validate fees vector length matches number of tokens
         require(swapFeesPpm_.length == tokens_.length, "Planner: fees and tokens length mismatch");
 
@@ -141,7 +136,6 @@ contract PartyPlanner is PartyPoolDeployer, OwnableExternal, IPartyPlanner {
             symbol_,
             tokens_,
             kappa_,
-            anchorLogWeight_,
             swapFeesPpm_,
             flashFeePpm_,
             protocolFeePpm,
@@ -216,7 +210,6 @@ contract PartyPlanner is PartyPoolDeployer, OwnableExternal, IPartyPlanner {
         int128 kappa_,
         uint256 swapFeePpm_,
         uint256 flashFeePpm_,
-        int128 anchorLogWeight_,
         // Initial deposit information
         address payer,
         address receiver,
@@ -240,7 +233,6 @@ contract PartyPlanner is PartyPoolDeployer, OwnableExternal, IPartyPlanner {
             kappa_,
             feesArr,
             flashFeePpm_,
-            anchorLogWeight_,
             payer,
             receiver,
             initialDeposits,
@@ -252,7 +244,6 @@ contract PartyPlanner is PartyPoolDeployer, OwnableExternal, IPartyPlanner {
     // NOTE that the slippage target is only exactly achieved in completely balanced pools where all assets are
     // priced the same. This target is actually a minimum slippage that the pool imposes on traders, and the actual
     // slippage cost can be multiples bigger in practice due to pool inventory imbalances.
-    // This legacy overload always deploys with anchorLogWeight = 0 (unweighted).
     function newPool(
         // Pool constructor args (old signature)
         string memory name_,
@@ -272,7 +263,7 @@ contract PartyPlanner is PartyPoolDeployer, OwnableExternal, IPartyPlanner {
         // Compute kappa from slippage params using LMSR helper (kappa depends only on n, f and s)
         int128 computedKappa = LMSRStabilized.computeKappaFromSlippage(tokens_.length, tradeFrac_, targetSlippage_);
 
-        // Delegate to the kappa-based newPool variant (unweighted by default for this legacy path)
+        // Delegate to the kappa-based newPool variant
         return newPool(
             name_,
             symbol_,
@@ -280,7 +271,6 @@ contract PartyPlanner is PartyPoolDeployer, OwnableExternal, IPartyPlanner {
             computedKappa,
             swapFeePpm_,
             flashFeePpm_,
-            int128(0),
             payer,
             receiver,
             initialDeposits,

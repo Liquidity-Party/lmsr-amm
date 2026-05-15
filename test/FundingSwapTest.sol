@@ -205,12 +205,12 @@ contract FundingTest is Test {
         token1.approve(address(planner), INIT_BAL*2);
         token2.approve(address(planner), INIT_BAL*2);
         vm.prank(planner.owner());
-        (pool,) = planner.newPool("LP", "LP", tokens, kappa, feePpm, feePpm, int128(0) /* anchorLogWeight: unweighted */,
+        (pool,) = planner.newPool("LP", "LP", tokens, kappa, feePpm, feePpm,
             address(this), address(this), deposits, 0, 0);
 
         // Deploy pool with zero fees for exact balance matching
         vm.prank(planner.owner());
-        (poolZeroFee,) = planner.newPool("LP_ZERO", "LP_ZERO", tokens, kappa, 0, 0, int128(0) /* anchorLogWeight: unweighted */,
+        (poolZeroFee,) = planner.newPool("LP_ZERO", "LP_ZERO", tokens, kappa, 0, 0,
             address(this), address(this), deposits, 0, 0);
 
         // Mint tokens to alice and bob for testing
@@ -492,10 +492,10 @@ contract FundingTest is Test {
         token1.approve(address(planner), INIT_BAL*2);
         token2.approve(address(planner), INIT_BAL*2);
         vm.prank(planner.owner());
-        (testPool1,) = planner.newPool("LP_TEST_1", "LP_TEST_1", tokens, kappa, feePpm, feePpm, int128(0) /* anchorLogWeight: unweighted */,
+        (testPool1,) = planner.newPool("LP_TEST_1", "LP_TEST_1", tokens, kappa, feePpm, feePpm,
             address(this), address(this), deposits, INIT_BAL * tokens.length * 10**18, 0);
         vm.prank(planner.owner());
-        (testPool2,) = planner.newPool("LP_TEST_2", "LP_TEST_2", tokens, kappa, feePpm, feePpm, int128(0) /* anchorLogWeight: unweighted */,
+        (testPool2,) = planner.newPool("LP_TEST_2", "LP_TEST_2", tokens, kappa, feePpm, feePpm,
             address(this), address(this), deposits, INIT_BAL * tokens.length * 10**18, 0);
     }
 
@@ -520,13 +520,13 @@ contract FundingTest is Test {
         token1.approve(address(planner), INIT_BAL*3);
         token2.approve(address(planner), INIT_BAL*3);
         vm.prank(planner.owner());
-        (testPool1,) = planner.newPool("LP_TEST_1", "LP_TEST_1", tokens, kappa, feePpm, feePpm, int128(0) /* anchorLogWeight: unweighted */,
+        (testPool1,) = planner.newPool("LP_TEST_1", "LP_TEST_1", tokens, kappa, feePpm, feePpm,
             address(this), address(this), deposits, INIT_BAL * tokens.length * 10**18, 0);
         vm.prank(planner.owner());
-        (testPool2,) = planner.newPool("LP_TEST_2", "LP_TEST_2", tokens, kappa, feePpm, feePpm, int128(0) /* anchorLogWeight: unweighted */,
+        (testPool2,) = planner.newPool("LP_TEST_2", "LP_TEST_2", tokens, kappa, feePpm, feePpm,
             address(this), address(this), deposits, INIT_BAL * tokens.length * 10**18, 0);
         vm.prank(planner.owner());
-        (testPool3,) = planner.newPool("LP_TEST_3", "LP_TEST_3", tokens, kappa, feePpm, feePpm, int128(0) /* anchorLogWeight: unweighted */,
+        (testPool3,) = planner.newPool("LP_TEST_3", "LP_TEST_3", tokens, kappa, feePpm, feePpm,
             address(this), address(this), deposits, INIT_BAL * tokens.length * 10**18, 0);
     }
 
@@ -817,7 +817,7 @@ contract FundingTest is Test {
         token2.approve(address(planner), INIT_BAL * 2);
         IPartyPool donationPool;
         vm.prank(planner.owner());
-        (donationPool,) = planner.newPool("DLP", "DLP", tokens, kappa, feePpm, feePpm, int128(0) /* anchorLogWeight: unweighted */,
+        (donationPool,) = planner.newPool("DLP", "DLP", tokens, kappa, feePpm, feePpm,
             address(this), address(this), deposits, 0, 0);
 
         // This contract is sole LP. Record token0 balance of pool before over-delivery.

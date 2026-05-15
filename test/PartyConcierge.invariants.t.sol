@@ -289,7 +289,7 @@ contract PartyConciergeInvariantsTest is StdInvariant, Test {
 
         (pool,) = planner.newPool(
             "ConciergeInv", "CILP",
-            ierc20s, kappa, FEE_PPM, FEE_PPM, int128(0) /* anchorLogWeight: unweighted */,
+            ierc20s, kappa, FEE_PPM, FEE_PPM,
             address(this), address(this),
             deposits, INIT_BAL * n, 0
         );

@@ -104,7 +104,7 @@ contract PartyConciergeTest is Test {
 
         (pool,) = planner.newPool(
             "Pool", "LP",
-            tokens, kappa, 1000, 1000, int128(0) /* anchorLogWeight: unweighted */,
+            tokens, kappa, 1000, 1000,
             address(this), address(this),
             deposits, INIT_BAL * 3, 0
         );
@@ -475,7 +475,7 @@ contract PartyConciergeTest is Test {
 
         (IPartyPool malPool,) = planner.newPool(
             "MalPool", "MP",
-            toks, kappa, 1000, 1000, int128(0) /* anchorLogWeight: unweighted */,
+            toks, kappa, 1000, 1000,
             address(this), address(this),
             deposits, INIT_BAL * 3, 0
         );

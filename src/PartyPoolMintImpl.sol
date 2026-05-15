@@ -159,11 +159,11 @@ library PartyPoolMintImpl {
     // Initialization Mint
     //
 
-    // KAPPA / ANCHOR_LOG_WEIGHT are upper-case to match the caller's immutable slots
-    // (PartyPool), which this library is called from via delegatecall. n is bounded
-    // by the deployer so the per-asset balanceOf loop is not externally inducible.
+    // KAPPA is upper-case to match the caller's immutable slot (PartyPool), which this
+    // library is called from via delegatecall. n is bounded by the deployer so the
+    // per-asset balanceOf loop is not externally inducible.
     // slither-disable-next-line naming-convention,calls-loop
-    function initialMint(address receiver, uint256 lpTokens, int128 KAPPA, int128 ANCHOR_LOG_WEIGHT) external
+    function initialMint(address receiver, uint256 lpTokens, int128 KAPPA) external
     returns (uint256 lpMinted) {
         PoolState storage s = _ps();
         uint256 n = s._tokens.length;
@@ -187,7 +187,7 @@ library PartyPoolMintImpl {
             unchecked { i++; }
         }
 
-        s._lmsr.init(newQInternal, KAPPA, ANCHOR_LOG_WEIGHT);
+        s._lmsr.init(newQInternal, KAPPA);
 
         lpMinted = lpTokens == 0 ? 1e18 : lpTokens;
 
@@ -426,7 +426,7 @@ library PartyPoolMintImpl {
         require(beta > int128(0), "too small");
 
         int128 amountInInternal =
-            LMSRStabilized.swapAmountsForMint(lmsrState.kappa, lmsrState.qInternal, inputTokenIndex, beta, lmsrState.anchorLogWeight);
+            LMSRStabilized.swapAmountsForMint(lmsrState.kappa, lmsrState.qInternal, inputTokenIndex, beta);
 
         uint256 amountInUsed = _libInternalToUintCeilPure(amountInInternal, bases_[inputTokenIndex]);
         require(amountInUsed > 0, "too small");
@@ -479,7 +479,7 @@ library PartyPoolMintImpl {
             unchecked { idx++; }
         }
         int128 amountInInternal = LMSRStabilized.swapAmountsForMint(
-            s._lmsr.kappa, qFromCached, inputTokenIndex, beta, s._lmsr.anchorLogWeight
+            s._lmsr.kappa, qFromCached, inputTokenIndex, beta
         );
 
         uint256 amountInUsed = _libInternalToUintCeilPure(amountInInternal, s._bases[inputTokenIndex]);
@@ -561,7 +561,7 @@ library PartyPoolMintImpl {
         // caller from `alpha` if required.
         // slither-disable-next-line unused-return
         (, int128 payoutInternal) = LMSRStabilized.swapAmountsForBurn(lmsrState.kappa, lmsrState.qInternal,
-            outputTokenIndex, alpha, lmsrState.anchorLogWeight);
+            outputTokenIndex, alpha);
 
         uint256 grossAmountOut = ABDKMath64x64.mulu(payoutInternal, bases_[outputTokenIndex]);
         (outFee,) = _libComputeFee(grossAmountOut, swapFeePpm);
@@ -609,7 +609,7 @@ library PartyPoolMintImpl {
         // Only payoutInternal is needed in this branch.
         // slither-disable-next-line unused-return
         (, int128 payoutInternal) = LMSRStabilized.swapAmountsForBurn(
-            s._lmsr.kappa, qFromCached, outputTokenIndex, alpha, s._lmsr.anchorLogWeight
+            s._lmsr.kappa, qFromCached, outputTokenIndex, alpha
         );
 
         uint256 payoutGrossUint = ABDKMath64x64.mulu(payoutInternal, s._bases[outputTokenIndex]);

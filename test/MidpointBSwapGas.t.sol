@@ -51,7 +51,7 @@ contract MidpointBSwapGas is Test {
         // Initialize a full library State for parity assertions
         int128[] memory qInit = new int128[](10);
         for (uint i = 0; i < 10; i++) qInit[i] = v;
-        state10.init(qInit, kappa20pct, int128(0));
+        state10.init(qInit, kappa20pct);
     }
 
     // ------------------------------------------------------------------
@@ -267,7 +267,7 @@ contract MidpointBSwapGas is Test {
     function test_inlined_matches_library() public view {
         int128 a = q10[0] >> 7;
         int128 inlinedY = _swapMidpoint1(kappa20pct, sumQ10, q10[0], q10[1], a);
-        (, int128 libY) = LMSRStabilized.swapAmountsForExactInput(kappa20pct, _q10Array(), 0, 1, a, int128(0));
+        (, int128 libY) = LMSRStabilized.swapAmountsForExactInput(kappa20pct, _q10Array(), 0, 1, a);
         // Allow 1 ulp diff for fixed-point ops
         int128 diff = inlinedY > libY ? inlinedY - libY : libY - inlinedY;
         assertLt(uint256(int256(diff)), 4, "inlined midpoint must match library");

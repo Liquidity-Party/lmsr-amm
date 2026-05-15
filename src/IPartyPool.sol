@@ -120,12 +120,6 @@ interface IPartyPool is IERC20Metadata, IOwnable {
     /// @notice Per-asset swap fees in ppm. Fees are applied on input; for asset-to-asset swaps, add the two asset fees.
     function fees() external view returns (uint256[] memory);
 
-    /// @notice Slot-0 anchor log-weight (Q64.64 ln(w_0)) used by the LMSR kernel. Zero ⇒ unweighted.
-    /// @dev Positive values bias slot 0's marginal price upward; equilibrium share at uniform
-    ///      inventory is w_0/(w_0 + N-1). Set at deploy via `PartyPlanner.newPool` and
-    ///      immutable thereafter. Same value is mirrored in `LMSR().anchorLogWeight`.
-    function anchorLogWeight() external view returns (int128);
-
     /// @notice Flash-loan fee in parts-per-million (ppm) applied to flash borrow amounts.
     function flashFeePpm() external view returns (uint256);
 

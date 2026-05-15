@@ -54,12 +54,6 @@ library LMSRStabilizedBalancedPair {
             return LMSRStabilized.swapAmountsForExactInput(s, i, j, a);
         }
 
-        // The Taylor approximation below assumes symmetric LMSR (w_0 = 1). A non-zero
-        // anchor weight breaks that assumption, so fall back to the exact weighted kernel.
-        if (s.anchorLogWeight != int128(0)) {
-            return LMSRStabilized.swapAmountsForExactInput(s, i, j, a);
-        }
-
         int128 b = LMSRStabilized._computeB(s);
         int128 invB = ABDKMath64x64.div(ONE, b);
 
@@ -147,27 +141,20 @@ library LMSRStabilizedBalancedPair {
 
     /// @notice Pure (memory) variant of swapAmountsForExactInput.
     /// @dev Mirrors the storage variant exactly but reads from caller-supplied memory copies of
-    ///      kappa, qInternal and anchorLogWeight. Used by PartyInfo to quote BalancedPair pools
-    ///      without holding a storage reference. Returns are bit-equivalent to the storage variant.
+    ///      kappa and qInternal. Used by PartyInfo to quote BalancedPair pools without holding a
+    ///      storage reference. Returns are bit-equivalent to the storage variant.
     function swapAmountsForExactInput(
         int128 kappa,
         int128[] memory qInternal,
         uint256 i,
         uint256 j,
-        int128 a,
-        int128 anchorLogWeight
+        int128 a
     ) internal pure returns (int128 amountIn, int128 amountOut) {
         uint256 nAssets = qInternal.length;
         require(i < nAssets && j < nAssets, "invalid index");
 
         if (nAssets != 2) {
-            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a, anchorLogWeight);
-        }
-
-        // The Taylor approximation below assumes symmetric LMSR (w_0 = 1). A non-zero
-        // anchor weight breaks that assumption, so fall back to the exact weighted kernel.
-        if (anchorLogWeight != int128(0)) {
-            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a, anchorLogWeight);
+            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a);
         }
 
         int128 sizeMetric = LMSRStabilized._computeSizeMetric(qInternal);
@@ -181,17 +168,17 @@ library LMSRStabilizedBalancedPair {
 
         int128 DELTA_MAX = ABDKMath64x64.divu(1, 100);
         if (absDelta > DELTA_MAX) {
-            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a, anchorLogWeight);
+            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a);
         }
 
         int128 u = a.mul(invB);
         if (u <= int128(0)) {
-            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a, anchorLogWeight);
+            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a);
         }
 
         int128 U_MAX = ABDKMath64x64.divu(1, 2);
         if (u > U_MAX) {
-            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a, anchorLogWeight);
+            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a);
         }
 
         int128 U_TIER1 = ABDKMath64x64.divu(1, 10);
@@ -208,25 +195,25 @@ library LMSRStabilizedBalancedPair {
             int128 X3 = X2.mul(X);
             lnApprox = X.sub(X2.div(ABDKMath64x64.fromUInt(2))).add(X3.div(ABDKMath64x64.fromUInt(3)));
         } else {
-            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a, anchorLogWeight);
+            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a);
         }
 
         int128 approxOut = b.mul(lnApprox);
 
         if (approxOut <= int128(0)) {
-            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a, anchorLogWeight);
+            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a);
         }
 
         int128 qj64 = qInternal[j];
         if (approxOut >= qj64) {
-            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a, anchorLogWeight);
+            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a);
         }
 
         amountIn = a;
         amountOut = approxOut;
 
         if (amountOut < int128(0)) {
-            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a, anchorLogWeight);
+            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a);
         }
 
         return (amountIn, amountOut);

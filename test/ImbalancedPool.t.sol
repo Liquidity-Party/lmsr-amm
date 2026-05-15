@@ -98,7 +98,7 @@ contract ImbalancedPoolTest is Test {
             kappa,
             swapFeePpm,
             flashFeePpm,
-            int128(0) /* anchorLogWeight: unweighted */,
+           
             address(this),
             address(this),
             deposits,

@@ -58,14 +58,6 @@ contract PartyPool is PartyPoolBase, OwnableExternal, ERC20External, IPartyPool 
     // slither-disable-next-line naming-convention
     int128 private immutable KAPPA;
 
-    /// @notice Anchor log-weight ln(w_0) (Q64.64) applied to slot 0 only. Zero ⇒ unweighted.
-    /// @dev Captured as an immutable at deploy time and passed into `LMSRStabilized.init` on
-    ///      first mint. After init it lives in `_lmsr.anchorLogWeight`; storage overloads in
-    ///      the kernel read it from there, so this immutable is only consulted at init.
-    // slither-disable-next-line naming-convention
-    int128 private immutable ANCHOR_LOG_WEIGHT;
-    function anchorLogWeight() external view returns (int128) { return ANCHOR_LOG_WEIGHT; }
-
     /// @notice Per-asset swap fees in ppm.
     function fees() external view returns (uint256[] memory) { return _fees; }
 
@@ -118,7 +110,6 @@ contract PartyPool is PartyPoolBase, OwnableExternal, ERC20External, IPartyPool 
         WRAPPER = p.wrapper;
         PERMIT2 = p.permit2;
         KAPPA = p.kappa;
-        ANCHOR_LOG_WEIGHT = p.anchorLogWeight;
         FLASH_FEE_PPM = p.flashFeePpm;
         PROTOCOL_FEE_PPM = p.protocolFeePpm;
         PartyPoolExtraImpl.init(p);
@@ -155,7 +146,7 @@ contract PartyPool is PartyPoolBase, OwnableExternal, ERC20External, IPartyPool 
     /// @inheritdoc IPartyPool
     function initialMint(address receiver, uint256 lpTokens) external payable native killable nonReentrant
     returns (uint256 lpMinted) {
-        return PartyPoolMintImpl.initialMint(receiver, lpTokens, KAPPA, ANCHOR_LOG_WEIGHT);
+        return PartyPoolMintImpl.initialMint(receiver, lpTokens, KAPPA);
     }
 
     /// @inheritdoc IPartyPool

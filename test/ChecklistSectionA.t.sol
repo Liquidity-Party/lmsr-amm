@@ -190,7 +190,7 @@ contract ChecklistSectionA is Test {
         vm.prank(bob);
         vm.expectRevert(abi.encodeWithSelector(IOwnable.OwnableUnauthorizedAccount.selector, bob));
         planner.newPool(
-            "X", "X", tokens, int128(1), feesArr, 0, int128(0) /* anchorLogWeight: unweighted */,
+            "X", "X", tokens, int128(1), feesArr, 0,
             bob, bob, deposits, 1, 0
         );
     }

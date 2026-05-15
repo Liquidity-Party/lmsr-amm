@@ -74,7 +74,7 @@ contract LMSRStabilizedCostParityTest is Test {
 
         // Execute the production swap
         (int128 amountIn, int128 amountOut) =
-            LMSRStabilized.swapAmountsForExactInput(kappa, q, i, j, a, int128(0));
+            LMSRStabilized.swapAmountsForExactInput(kappa, q, i, j, a);
         assertGt(amountIn,  int128(0), "amountIn > 0");
         assertGt(amountOut, int128(0), "amountOut > 0");
 

@@ -102,7 +102,7 @@ contract PartyPlannerTest is Test {
             computedKappa,
             swapFeePpm,
             flashFeePpm,
-            int128(0) /* anchorLogWeight: unweighted */, // not stable
+            // not stable
             payer,
             receiver,
             initialDeposits,
@@ -175,7 +175,7 @@ contract PartyPlannerTest is Test {
         int128 kappa1 = LMSRStabilized.computeKappaFromSlippage(tokens1.length, int128((1 << 64) - 1), int128(1 << 62));
         (IPartyPool pool1,) = planner.newPool(
             "Pool 1", "LP1", tokens1,
-            kappa1, 3000, 5000, int128(0) /* anchorLogWeight: unweighted */,
+            kappa1, 3000, 5000,
             payer, receiver, deposits1, 1000e18, 0
         );
 
@@ -195,7 +195,7 @@ contract PartyPlannerTest is Test {
         int128 kappa2 = LMSRStabilized.computeKappaFromSlippage(tokens2.length, int128((1 << 64) - 1), int128(1 << 62));
         (IPartyPool pool2,) = planner.newPool(
             "Pool 2", "LP2", tokens2,
-            kappa2, 3000, 5000, int128(0) /* anchorLogWeight: unweighted */,
+            kappa2, 3000, 5000,
             payer, receiver, deposits2, 1000e18, 0
         );
 
@@ -253,7 +253,7 @@ contract PartyPlannerTest is Test {
         vm.expectRevert("Planner: payer cannot be zero address");
         planner.newPool(
             "Test Pool", "TESTLP", tokens,
-            kappaErr, 3000, 5000, int128(0) /* anchorLogWeight: unweighted */,
+            kappaErr, 3000, 5000,
             address(0), receiver, validDeposits, 1000e18, 0
         );
 
@@ -261,7 +261,7 @@ contract PartyPlannerTest is Test {
         vm.expectRevert("Planner: receiver cannot be zero address");
         planner.newPool(
             "Test Pool", "TESTLP", tokens,
-            kappaErr, 3000, 5000, int128(0) /* anchorLogWeight: unweighted */,
+            kappaErr, 3000, 5000,
             payer, address(0), validDeposits, 1000e18, 0
         );
 
@@ -272,7 +272,7 @@ contract PartyPlannerTest is Test {
         vm.expectRevert("Planner: deadline exceeded");
         planner.newPool(
             "Test Pool", "TESTLP", tokens,
-            kappaDeadline, 3000, 5000, int128(0) /* anchorLogWeight: unweighted */,
+            kappaDeadline, 3000, 5000,
             payer, receiver, validDeposits, 1000e18, block.timestamp - 1
         );
     }
@@ -300,7 +300,7 @@ contract PartyPlannerTest is Test {
                 string(abi.encodePacked("Pool ", vm.toString(i))),
                 string(abi.encodePacked("LP", vm.toString(i))),
                 tokens,
-                kappaLoop, 3000, 5000, int128(0) /* anchorLogWeight: unweighted */,
+                kappaLoop, 3000, 5000,
                 payer, receiver, deposits, 1000e18, 0
             );
 

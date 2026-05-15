@@ -14,12 +14,6 @@ library LMSRStabilized {
 
     struct State {
         int128 kappa;            // liquidity parameter κ (64.64 fixed point)
-        int128 anchorLogWeight;  // ln(w_0) in 64.64 fixed-point: anchor weight applied to slot 0.
-                                 //   Zero ⇒ unweighted (w_0 = 1); positive ⇒ slot 0 marginal
-                                 //   price is biased upward, giving a mean-reverting "anchor"
-                                 //   inventory share at uniform-inventory equilibrium of
-                                 //   w_0 / (w_0 + N - 1) instead of 1/N. Packed with kappa
-                                 //   in the same storage slot (two int128 fields).
         int128[] qInternal;      // cached internal balances in 64.64 fixed-point format
     }
 
@@ -29,14 +23,10 @@ library LMSRStabilized {
 
     /// @notice Initialize the stabilized state from internal balances qInternal (int128[])
     /// qInternal must be normalized to 64.64 fixed-point format.
-    /// @param anchorLogWeight ln(w_0) Q64.64; pass 0 for an unweighted (uniform) kernel.
-    ///                       Must be >= 0 — downweighting is not supported and would
-    ///                       erode slot 0's price share, the opposite of the intended use.
     function init(
         State storage s,
         int128[] memory initialQInternal,
-        int128 kappa,
-        int128 anchorLogWeight
+        int128 kappa
     ) internal {
         // Initialize qInternal cache
         if (s.qInternal.length != initialQInternal.length) {
@@ -54,33 +44,26 @@ library LMSRStabilized {
         // Set kappa directly (caller provides kappa)
         s.kappa = kappa;
         require(s.kappa > int128(0), "invalid kappa");
-
-        require(anchorLogWeight >= int128(0), "anchorLogWeight<0");
-        s.anchorLogWeight = anchorLogWeight;
     }
 
     /* --------------------
        View helpers
        -------------------- */
 
-    /// @notice Inventory-convention cost C(q) = -b * ln(w_0·exp(-q_0/b) + Σ_{k≥1} exp(-q_k/b))
+    /// @notice Inventory-convention cost C(q) = -b * ln(Σ exp(-q_k/b))
     /// @dev q is pool inventory (deposit grows q). Hanson exact-input swap is exactly
     ///      cost-preserving under this convention: C(q + a·e_i − y·e_j) = C(q).
-    ///      With slot-0 weight w_0 (encoded as anchorLogWeight = ln(w_0)), slot 0
-    ///      gets an in-exponent shift: y-space contribution becomes (-q_0/b + ln(w_0)).
-    ///      anchorLogWeight = 0 ⇒ standard unweighted LMSR.
     function cost(State storage s) internal view returns (int128) {
-        return cost(s.kappa, s.qInternal, s.anchorLogWeight);
+        return cost(s.kappa, s.qInternal);
     }
 
-    /// @notice Pure version: weighted inventory-convention cost.
+    /// @notice Pure version: inventory-convention cost.
     /// @dev Implemented by negating each q on input to the log-sum-exp helper and
     ///      negating the resulting b·(M + ln Z). Equivalent to inlining a
     ///      `_computeMAndZ_inv` that streams exp(-q_k/b); chosen for code reuse since
     ///      this function is not on the hot swap path (only consumer is the LSLMSR
-    ///      bisection prototype). For weighted form, slot 0's y-space term picks up
-    ///      a +anchorLogWeight offset inside `_computeMAndZ`.
-    function cost(int128 kappa, int128[] memory qInternal, int128 anchorLogWeight) internal pure returns (int128) {
+    ///      bisection prototype).
+    function cost(int128 kappa, int128[] memory qInternal) internal pure returns (int128) {
         int128 sizeMetric = _computeSizeMetric(qInternal);
         require(sizeMetric > int128(0), "uninitialized");
         int128 b = kappa.mul(sizeMetric);
@@ -90,7 +73,7 @@ library LMSRStabilized {
             negQ[k] = qInternal[k].neg();
             unchecked { k++; }
         }
-        (int128 M, int128 Z) = _computeMAndZ(b, negQ, anchorLogWeight);
+        (int128 M, int128 Z) = _computeMAndZ(b, negQ);
         int128 lnZ = _ln(Z);
         int128 inner = M.add(lnZ);
         int128 c = b.mul(inner).neg();
@@ -120,14 +103,13 @@ library LMSRStabilized {
         uint256 j,
         int128 a
     ) internal view returns (int128 amountIn, int128 amountOut) {
-        return swapAmountsForExactInput(s.kappa, s.qInternal, i, j, a, s.anchorLogWeight);
+        return swapAmountsForExactInput(s.kappa, s.qInternal, i, j, a);
     }
 
     /// @notice Like swapAmountsForExactInput(State storage, ...) but accepts a pre-known
     /// token count to avoid an SLOAD of the array length during the storage-to-memory copy.
     // Inline assembly resolves State.qInternal's slot without an SLOAD on the array's
-    // length — pure layout arithmetic. State has (kappa,anchorLogWeight) packed at offset 0
-    // and qInternal at +1; the packing keeps the qInternal slot offset stable.
+    // length — pure layout arithmetic. State has kappa at offset 0 and qInternal at +1.
     // slither-disable-next-line assembly
     function swapAmountsForExactInput(
         State storage s,
@@ -138,13 +120,11 @@ library LMSRStabilized {
     ) internal view returns (int128 amountIn, int128 amountOut) {
         uint256 qSlot;
         assembly { qSlot := add(s.slot, 1) }
-        return swapAmountsForExactInput(s.kappa, _qToMemory(qSlot, n), i, j, a, s.anchorLogWeight);
+        return swapAmountsForExactInput(s.kappa, _qToMemory(qSlot, n), i, j, a);
     }
 
     /// @notice Like the n-overload above but accepts a caller-supplied `kappa`, avoiding the
-    /// SLOAD of s.kappa when the caller already holds kappa as an immutable. The
-    /// `anchorLogWeight` field is loaded from `s` (it is packed into the same storage slot
-    /// as `kappa`, so this is at most a single SLOAD that is typically already warm).
+    /// SLOAD of s.kappa when the caller already holds kappa as an immutable.
     // slither-disable-next-line assembly
     function swapAmountsForExactInput(
         State storage s,
@@ -156,7 +136,7 @@ library LMSRStabilized {
     ) internal view returns (int128 amountIn, int128 amountOut) {
         uint256 qSlot;
         assembly { qSlot := add(s.slot, 1) }
-        return swapAmountsForExactInput(kappa, _qToMemory(qSlot, n), i, j, a, s.anchorLogWeight);
+        return swapAmountsForExactInput(kappa, _qToMemory(qSlot, n), i, j, a);
     }
 
     /// @notice Pure version: asset-i -> asset-j amountOut in 64.64 fixed-point format (fee-free kernel).
@@ -185,8 +165,7 @@ library LMSRStabilized {
         int128[] memory qInternal,
         uint256 i,
         uint256 j,
-        int128 a,
-        int128 anchorLogWeight
+        int128 a
     ) internal pure returns (int128 amountIn, int128 amountOut) {
         amountIn = a;
 
@@ -196,11 +175,6 @@ library LMSRStabilized {
 
         // Two-pass midpoint-b: pass 0 evaluates Hanson at frozen pre-state b
         // (size = S), pass 1 re-evaluates at b_mid = κ·(S + (a−y0)/2); `>> 1` = /2 on Q64.64.
-        // For the weighted form, slot 0 carries an in-exponent shift of -ln(w_0) on
-        // its effective q (so q'_0 = q_0 - b·anchorLogWeight). This makes r0 pick up a
-        // (w_i/w_j) factor: when i==0, qDiff_eff = q_j - q'_0 = qDiff + b·anchorLogWeight;
-        // when j==0, qDiff_eff = q'_0 - q_i = qDiff - b·anchorLogWeight. Recomputed per
-        // pass because b itself evolves. Zero-weight is a no-op (cost-free back-compat).
         int128 size = sizeMetric;
         int128 y;
         for (uint256 pass = 0; pass < 2; ) {
@@ -209,13 +183,7 @@ library LMSRStabilized {
             int128 aOverB = a.mul(invB);
             // EXP_LIMIT check on pass 0 implies pass 1 (b_mid > b ⇒ aOverB_mid < aOverB).
             if (pass == 0) require(aOverB <= EXP_LIMIT, "too large");
-            int128 qDiffEff = qDiff;
-            if (anchorLogWeight != int128(0)) {
-                int128 shift = b.mul(anchorLogWeight);
-                if (i == 0) qDiffEff = qDiffEff.add(shift);
-                else if (j == 0) qDiffEff = qDiffEff.sub(shift);
-            }
-            int128 inner = ONE.add(_exp(qDiffEff.mul(invB)).mul(ONE.sub(_exp(aOverB.neg()))));
+            int128 inner = ONE.add(_exp(qDiff.mul(invB)).mul(ONE.sub(_exp(aOverB.neg()))));
             if (inner <= int128(0)) {
                 return (amountIn, qInternal[j]); // cap output to q_j
             }
@@ -255,8 +223,7 @@ library LMSRStabilized {
         int128[] memory qInternal,
         uint256 i,
         uint256 j,
-        int128 a,
-        int128 anchorLogWeight
+        int128 a
     ) internal pure returns (int128 amountIn, int128 amountOut) {
         require(i != j, "i == j");
         require(a > int128(0), "invalid amount");
@@ -264,11 +231,11 @@ library LMSRStabilized {
 
         // Hanson result as initial lower bound for y under inventory convention
         // (Hanson at frozen pre-b under-estimates true LS-LMSR output, so y_LS ≥ yHanson).
-        (, int128 yHanson) = swapAmountsForExactInput(kappa, qInternal, i, j, a, anchorLogWeight);
+        (, int128 yHanson) = swapAmountsForExactInput(kappa, qInternal, i, j, a);
         if (yHanson <= int128(0)) return (a, int128(0));
 
         // C_target = C(q) at pre-swap state.
-        int128 C_target = cost(kappa, qInternal, anchorLogWeight);
+        int128 C_target = cost(kappa, qInternal);
 
         // Working copy of q for in-loop mutation.
         uint256 n = qInternal.length;
@@ -297,7 +264,7 @@ library LMSRStabilized {
             if (yMid <= int128(0) || yMid >= qj0) { yHigh = yMid; unchecked { iter++; } continue; }
             qWork[j] = qj0.sub(yMid);
             // C at the trial post-state.
-            int128 C_new = cost(kappa, qWork, anchorLogWeight);
+            int128 C_new = cost(kappa, qWork);
             if (C_new < C_target) {
                 yLow = yMid;
             } else {
@@ -325,7 +292,7 @@ library LMSRStabilized {
         uint256 j,
         int128 y
     ) internal view returns (int128 amountIn) {
-        return amountInForExactOutput(s.kappa, s.qInternal, i, j, y, s.anchorLogWeight);
+        return amountInForExactOutput(s.kappa, s.qInternal, i, j, y);
     }
 
     /// @notice Pure version of amountInForExactOutput.
@@ -334,8 +301,7 @@ library LMSRStabilized {
         int128[] memory qInternal,
         uint256 i,
         uint256 j,
-        int128 y,
-        int128 anchorLogWeight
+        int128 y
     ) internal pure returns (int128 amountIn) {
         require(i != j, "same token");
         require(y > int128(0), "invalid amount");
@@ -346,14 +312,7 @@ library LMSRStabilized {
         int128 invB = ABDKMath64x64.div(ONE, b);
 
         // r0 = exp((q_j - q_i)/b)  -- same convention as swapAmountsForExactInput.
-        // Weighted form: slot 0 gets effective q'_0 = q_0 - b·anchorLogWeight, so
-        // when i==0, qDiff_eff = qDiff + b·anchorLogWeight; when j==0, qDiff_eff = qDiff - b·anchorLogWeight.
         int128 qDiff = qInternal[j].sub(qInternal[i]);
-        if (anchorLogWeight != int128(0)) {
-            int128 shift = b.mul(anchorLogWeight);
-            if (i == 0) qDiff = qDiff.add(shift);
-            else if (j == 0) qDiff = qDiff.sub(shift);
-        }
         int128 r0 = _exp(qDiff.mul(invB));
 
         // E = exp(y/b); guard the exp domain.
@@ -390,7 +349,7 @@ library LMSRStabilized {
         uint256 i,
         int128 beta
     ) internal view returns (int128 amountIn) {
-        return swapAmountsForMint(s.kappa, s.qInternal, i, beta, s.anchorLogWeight);
+        return swapAmountsForMint(s.kappa, s.qInternal, i, beta);
     }
 
     /// @notice Pure version: multi-step (compositional) swapMint solver.
@@ -398,15 +357,13 @@ library LMSRStabilized {
     /// @param qInternal Cached internal balances in 64.64 fixed-point format
     /// @param i Index of input asset
     /// @param beta Pool-fraction parameter β ∈ (0,1); β = γ/(1+γ) where γ is LP growth.
-    /// @param anchorLogWeight ln(w_0) Q64.64; 0 for unweighted.
     /// @return amountIn Internal Q64.64 deposit required to realize growth γ.
     // slither-disable-next-line cyclomatic-complexity
     function swapAmountsForMint(
         int128 kappa,
         int128[] memory qInternal,
         uint256 i,
-        int128 beta,
-        int128 anchorLogWeight
+        int128 beta
     ) internal pure returns (int128 amountIn) {
         uint256 n = qInternal.length;
         require(i < n, "invalid index");
@@ -460,23 +417,8 @@ library LMSRStabilized {
                     // so E rounds up. Floored invB is therefore safe at the source.
                     int128 invB = ABDKMath64x64.div(ONE, b);
 
-                    // qDiff_eff for the j→i leg: q_j - q_i with slot-0 weight applied.
-                    // Subtraction is exact. The anchor `shift = b·anchorLogWeight` is
-                    // direction-sensitive: it appears as +shift when i==0 (slot 0 is
-                    // the input, and the kernel substitutes q'_0 = q_0 − shift, so
-                    // qDiff = q_j − q'_0 = qDiff + shift), and as −shift when j==0
-                    // (qDiff = q'_0 − q_i = qDiff − shift). For LP-favor on this leg
-                    // we want qDiffJI as SMALL as possible (→ smaller r0 → larger xj):
-                    //   * i==0  (add shift)  →  pick the SMALLEST representable shift
-                    //                           → natural floor mul.
-                    //   * j==0  (sub shift)  →  pick the LARGEST representable shift
-                    //                           → _ceilMul, so the subtraction shrinks
-                    //                             qDiffJI maximally.
+                    // qDiff for the j→i leg: q_j - q_i. Subtraction is exact.
                     int128 qDiffJI = qLocal[j].sub(qLocal[i]);
-                    if (anchorLogWeight != int128(0)) {
-                        if (i == 0) qDiffJI = qDiffJI.add(b.mul(anchorLogWeight));
-                        else if (j == 0) qDiffJI = qDiffJI.sub(_ceilMul(b, anchorLogWeight));
-                    }
                     // qDiffJI·invB. ABDK mul arithmetic-shifts: it floors toward −∞ for
                     // BOTH signs. We want a SMALLER (more negative or smaller-positive)
                     // qDiffJIOverB because exp is monotone increasing — smaller arg
@@ -656,7 +598,7 @@ library LMSRStabilized {
         uint256 i,
         int128 alpha
     ) internal view returns (int128 amountIn, int128 amountOut) {
-        return swapAmountsForBurn(s.kappa, s.qInternal, i, alpha, s.anchorLogWeight);
+        return swapAmountsForBurn(s.kappa, s.qInternal, i, alpha);
     }
 
     /// @notice Pure version: Compute single-asset payout when burning a proportional share alpha of the pool.
@@ -678,8 +620,7 @@ library LMSRStabilized {
         int128 kappa,
         int128[] memory qInternal,
         uint256 i,
-        int128 alpha,
-        int128 anchorLogWeight
+        int128 alpha
     ) internal pure returns (int128 amountIn, int128 amountOut) {
         require(alpha > int128(0), "too small");
         require(alpha <= ONE, "too large");
@@ -758,21 +699,8 @@ library LMSRStabilized {
                     // we cushion via the +1 ulp bump below so that even an underflowed
                     // expNeg is treated as if it were strictly positive.
 
-                    // qDiff_eff = q_local[i] − q_local[j], with slot-0 anchor weighted in.
-                    // When `i == 0` we subtract `shift` (slot 0 is OUTPUT side), and we
-                    // want qDiffIJ as SMALL as possible (smaller r0_j ⇒ smaller y) — so
-                    // we want shift as LARGE as possible → _ceilMul.
-                    // When `j == 0` we ADD `shift` (slot 0 is INPUT side), and again we
-                    // want qDiffIJ as small as possible — so shift as SMALL as possible →
-                    // natural floor mul.
-                    // The asymmetry in `_ceilMul`/`mul` here is the mirror image of the
-                    // mint-side split: same goal (minimize the effective qDiff), opposite
-                    // sign convention.
+                    // qDiff = q_local[i] − q_local[j].
                     int128 qDiffIJ = qLocal[i].sub(qLocal[j]);
-                    if (anchorLogWeight != int128(0)) {
-                        if (i == 0) qDiffIJ = qDiffIJ.sub(_ceilMul(b, anchorLogWeight));
-                        else if (j == 0) qDiffIJ = qDiffIJ.add(b.mul(anchorLogWeight));
-                    }
                     // qDiffIJ·invB. Floor toward −∞ (ABDK mul) gives SMALLER value for
                     // both signs → smaller r0_j → smaller y → LP-favor. No sign split.
                     int128 qDiffOverB = qDiffIJ.mul(invB);
@@ -946,10 +874,9 @@ library LMSRStabilized {
     }
 
     /// @notice Infinitesimal out-per-in marginal price for swap input->output as Q64.64
-    /// @dev Returns exp((q_output - q_input) / b) under the weighted form, with slot 0
-    ///      contributing an effective q'_0 = q_0 - b·anchorLogWeight. Indices valid, b > 0.
+    /// @dev Returns exp((q_output - q_input) / b). Indices valid, b > 0.
     function price(State storage s, uint256 inputTokenIndex, uint256 outputTokenIndex) internal view returns (int128) {
-        return price(s.kappa, s.qInternal, inputTokenIndex, outputTokenIndex, s.anchorLogWeight);
+        return price(s.kappa, s.qInternal, inputTokenIndex, outputTokenIndex);
     }
 
     /// @notice Pure version: Infinitesimal out-per-in marginal price for swap input->output as Q64.64
@@ -957,14 +884,12 @@ library LMSRStabilized {
     /// @param qInternal Cached internal balances in 64.64 fixed-point format
     /// @param inputTokenIndex Index of input token
     /// @param outputTokenIndex Index of output token
-    /// @param anchorLogWeight ln(w_0) Q64.64; 0 for unweighted.
     /// @return Price in 64.64 fixed-point format
     function price(
         int128 kappa,
         int128[] memory qInternal,
         uint256 inputTokenIndex,
-        uint256 outputTokenIndex,
-        int128 anchorLogWeight
+        uint256 outputTokenIndex
     ) internal pure returns (int128) {
         int128 sizeMetric = _computeSizeMetric(qInternal);
         require(sizeMetric > int128(0), "uninitialized");
@@ -972,14 +897,8 @@ library LMSRStabilized {
 
         // Use reciprocal of b to avoid repeated divisions
         int128 invB = ABDKMath64x64.div(ONE, b);
-        // Marginal price output / input = exp((q_output - q_input) / b), with the
-        // q'_0 = q_0 - b·anchorLogWeight substitution applied when slot 0 participates.
+        // Marginal price output / input = exp((q_output - q_input) / b).
         int128 qDiff = qInternal[outputTokenIndex].sub(qInternal[inputTokenIndex]);
-        if (anchorLogWeight != int128(0)) {
-            int128 shift = b.mul(anchorLogWeight);
-            if (inputTokenIndex == 0) qDiff = qDiff.add(shift);
-            else if (outputTokenIndex == 0) qDiff = qDiff.sub(shift);
-        }
         return _exp(qDiff.mul(invB));
     }
 
@@ -1041,9 +960,6 @@ library LMSRStabilized {
 
     /// @notice Legacy-compatible init: compute kappa from slippage parameters and delegate to kappa-based init.
     /// @dev Used only by tests; production callers use the kappa-based init directly.
-    ///      Always sets anchorLogWeight = 0 (unweighted). Renamed from `init` because adding the
-    ///      `anchorLogWeight` parameter to the canonical init made the two 4-arg `init` overloads
-    ///      collide on identical parameter types ((State, int128[], int128, int128)).
     function initFromSlippage(
         State storage s,
         int128[] memory initialQInternal,
@@ -1052,8 +968,7 @@ library LMSRStabilized {
     ) internal {
         // compute kappa using the internal helper
         int128 kappa = computeKappaFromSlippage(initialQInternal.length, tradeFrac, targetSlippage);
-        // forward to the new kappa-based init with unweighted defaults
-        init(s, initialQInternal, kappa, int128(0));
+        init(s, initialQInternal, kappa);
     }
 
 
@@ -1062,7 +977,6 @@ library LMSRStabilized {
     function deinit(State storage s) internal {
         // Reset core state
         s.kappa = int128(0);
-        s.anchorLogWeight = int128(0);
 
         // Clear qInternal array
         delete s.qInternal;
@@ -1071,20 +985,14 @@ library LMSRStabilized {
     }
 
     /// @notice Compute M (shift) and Z (sum of exponentials) dynamically.
-    /// @dev `anchorLogWeight` is added to slot 0's y-space term so that the weighted
-    ///      cost form `w_0·exp(-q_0/b) + Σ_{k≥1} exp(-q_k/b)` reduces to a single
-    ///      log-sum-exp by treating slot 0 as if its (negated) q were shifted by
-    ///      +ln(w_0). Pass 0 for the unweighted case (back-compat).
-    function _computeMAndZ(int128 b, int128[] memory qInternal, int128 anchorLogWeight)
+    function _computeMAndZ(int128 b, int128[] memory qInternal)
         internal pure returns (int128 M, int128 Z)
     {
         // Precompute reciprocal of b to replace divisions with multiplications in the loop
         int128 invB = ABDKMath64x64.div(ONE, b);
 
-        // Initialize with the first element. For weighted form, slot 0's y-space term
-        // gets a +anchorLogWeight offset (Z=1 still corresponds to that anchored term).
         uint len = qInternal.length;
-        M = qInternal[0].mul(invB).add(anchorLogWeight);
+        M = qInternal[0].mul(invB);
         Z = ONE; // only the first term contributes exp(0) = 1
 
         // One-pass accumulation with on-the-fly recentering
@@ -1104,9 +1012,7 @@ library LMSRStabilized {
     }
 
     /// @notice Compute all e[i] = exp(z[i]) values dynamically.
-    /// @dev `anchorLogWeight` shifts slot 0's y-space term by +ln(w_0), matching
-    ///      `_computeMAndZ`. Pass 0 for unweighted.
-    function _computeE(int128 b, int128[] memory qInternal, int128 M, int128 anchorLogWeight)
+    function _computeE(int128 b, int128[] memory qInternal, int128 M)
         internal pure returns (int128[] memory e)
     {
         uint len = qInternal.length;
@@ -1117,7 +1023,6 @@ library LMSRStabilized {
 
         for (uint i = 0; i < len; ) {
             int128 y_i = qInternal[i].mul(invB);
-            if (i == 0) y_i = y_i.add(anchorLogWeight);
             int128 z_i = y_i.sub(M);
             e[i] = _exp(z_i);
             unchecked { i++; }
@@ -1138,25 +1043,6 @@ library LMSRStabilized {
 
     function _exp(int128 x) internal pure returns (int128) { return ABDKMath64x64.exp(x); }
     function _ln(int128 x) internal pure returns (int128)  { return ABDKMath64x64.ln(x); }
-
-    /// @notice Compute anchorLogWeight = ln((N-1)·s*/(1-s*)) for a desired slot-0 target share s*.
-    /// @dev At uniform kernel inventory the resulting weighted-LMSR equilibrium gives slot 0 a
-    ///      marginal-price share of exactly `targetShare`. Returns 0 when `targetShare == 1/N`
-    ///      (unweighted). Reverts for non-(0,1) shares or `n < 2`.
-    /// @param n Total slot count (must be >= 2).
-    /// @param targetShare Slot-0 share at uniform inventory in Q64.64; must be in (0, 1).
-    /// @return anchorLogWeight ln(w_0) in Q64.64, >= 0 iff targetShare >= 1/n.
-    function anchorLogWeightFromTargetShare(uint256 n, int128 targetShare) internal pure returns (int128) {
-        require(n >= 2, "n>=2 required");
-        require(targetShare > int128(0) && targetShare < ONE, "targetShare not in (0,1)");
-        int128 nMinus1 = ABDKMath64x64.fromUInt(n - 1);
-        // w_0 = (N-1) · s* / (1 - s*)
-        int128 numerator = nMinus1.mul(targetShare);
-        int128 denominator = ONE.sub(targetShare);
-        int128 w0 = numerator.div(denominator);
-        require(w0 > int128(0), "w0<=0");
-        return _ln(w0);
-    }
 
     // --- int128[] storage access helpers ---
     // Solidity emits an SLOAD of the array length slot on every storage array access for bounds

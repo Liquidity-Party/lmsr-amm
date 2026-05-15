@@ -68,7 +68,7 @@ contract InitialMintTest is Test {
 
         vm.prank(planner.owner());
         (pool,) = planner.newPool(
-            "LP", "LP", tokens, kappa, 1000, 1000, int128(0) /* anchorLogWeight: unweighted */,
+            "LP", "LP", tokens, kappa, 1000, 1000,
             address(this), address(this), deposits, 0, 0
         );
     }
@@ -100,7 +100,7 @@ contract InitialMintTest is Test {
         vm.prank(planner.owner());
         vm.expectRevert(bytes("insufficient balance"));
         planner.newPool(
-            "LP_ZERO", "LP_ZERO", tokens, kappa, 1000, 1000, int128(0) /* anchorLogWeight: unweighted */,
+            "LP_ZERO", "LP_ZERO", tokens, kappa, 1000, 1000,
             address(this), address(this), zeroDeposits, 0, 0
         );
     }
@@ -127,7 +127,7 @@ contract InitialMintTest is Test {
         vm.prank(planner.owner());
         vm.expectRevert(bytes("insufficient balance"));
         planner.newPool(
-            "LP_PARTIAL", "LP_PARTIAL", tokens, kappa, 1000, 1000, int128(0) /* anchorLogWeight: unweighted */,
+            "LP_PARTIAL", "LP_PARTIAL", tokens, kappa, 1000, 1000,
             address(this), address(this), partialDeposits, 0, 0
         );
     }

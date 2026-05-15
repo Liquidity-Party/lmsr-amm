@@ -34,7 +34,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         LMSRStabilized.State memory lmsr = pool.LMSR();
         uint256 nAssets = lmsr.qInternal.length;
         require(inputTokenIndex < nAssets && outputTokenIndex < nAssets, "price: idx");
-        int128 p = LMSRStabilized.price(lmsr.kappa, lmsr.qInternal, inputTokenIndex, outputTokenIndex, lmsr.anchorLogWeight);
+        int128 p = LMSRStabilized.price(lmsr.kappa, lmsr.qInternal, inputTokenIndex, outputTokenIndex);
         require(p > 0, "price: non-positive");
         uint256[] memory denoms = pool.denominators();
         return (uint256(int256(p)) * denoms[outputTokenIndex] << 64) / denoms[inputTokenIndex];
@@ -115,11 +115,11 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         int128 amountOutInternal;
         if (_isBalancedPair(pool)) {
             (amountInInternalUsed, amountOutInternal) = LMSRStabilizedBalancedPair.swapAmountsForExactInput(
-                lmsr.kappa, lmsr.qInternal, inputTokenIndex, outputTokenIndex, deltaInternalI, lmsr.anchorLogWeight
+                lmsr.kappa, lmsr.qInternal, inputTokenIndex, outputTokenIndex, deltaInternalI
             );
         } else {
             (amountInInternalUsed, amountOutInternal) = LMSRStabilized.swapAmountsForExactInput(
-                lmsr.kappa, lmsr.qInternal, inputTokenIndex, outputTokenIndex, deltaInternalI, lmsr.anchorLogWeight
+                lmsr.kappa, lmsr.qInternal, inputTokenIndex, outputTokenIndex, deltaInternalI
             );
         }
 
@@ -155,7 +155,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         require(yInternal > int128(0), "too small");
 
         int128 amountInInternal = LMSRStabilized.amountInForExactOutput(
-            lmsr.kappa, lmsr.qInternal, inputTokenIndex, outputTokenIndex, yInternal, lmsr.anchorLogWeight
+            lmsr.kappa, lmsr.qInternal, inputTokenIndex, outputTokenIndex, yInternal
         );
         uint256 baseI = bases[inputTokenIndex];
         amountIn = _internalToUintCeilPure(amountInInternal, baseI);
@@ -208,7 +208,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         int128 kappa  = lmsr.kappa;
         int128[] memory q = lmsr.qInternal;
 
-        int128 r0 = LMSRStabilized.price(kappa, q, inputTokenIndex, outputTokenIndex, lmsr.anchorLogWeight);
+        int128 r0 = LMSRStabilized.price(kappa, q, inputTokenIndex, outputTokenIndex);
         require(r0 > target, "swapAmounts: price at or below target");
 
         int128 S = _computeSizeMetric(q);
@@ -226,19 +226,12 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
 
             // We only need yMid here; aMid is the search variable.
             // slither-disable-next-line unused-return
-            (, int128 yMid) = LMSRStabilized.swapAmountsForExactInput(kappa, q, inputTokenIndex, outputTokenIndex, aMid, lmsr.anchorLogWeight);
+            (, int128 yMid) = LMSRStabilized.swapAmountsForExactInput(kappa, q, inputTokenIndex, outputTokenIndex, aMid);
 
-            // P_fwd after trial fill aMid. For weighted form, the marginal price ratio at
-            // the post-trial state must include the slot-0 q-shift (b·anchorLogWeight) so
-            // that the bisection target aligns with `LMSRStabilized.price` semantics.
+            // P_fwd after trial fill aMid.
             int128 diffNew  = q[outputTokenIndex].sub(yMid).sub(q[inputTokenIndex].add(aMid));
             int128 sNew     = S.add(aMid).sub(yMid);
             int128 bNew     = kappa.mul(sNew);
-            if (lmsr.anchorLogWeight != int128(0)) {
-                int128 shift = bNew.mul(lmsr.anchorLogWeight);
-                if (inputTokenIndex == 0) diffNew = diffNew.add(shift);
-                else if (outputTokenIndex == 0) diffNew = diffNew.sub(shift);
-            }
             int128 pfwdNew  = ABDKMath64x64.exp(diffNew.div(bNew));
 
             if (pfwdNew > target) {
@@ -424,11 +417,6 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         uint256 amount
     ) external view returns (uint256 fee) {
         (fee,) = _computeFee(amount, pool.flashFeePpm());
-    }
-
-    /// @inheritdoc IPartyInfo
-    function anchorLogWeightFromTargetShare(uint256 n, int128 targetShare) external pure returns (int128) {
-        return LMSRStabilized.anchorLogWeightFromTargetShare(n, targetShare);
     }
 
 }

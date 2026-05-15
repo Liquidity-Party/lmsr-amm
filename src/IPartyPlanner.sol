@@ -19,12 +19,6 @@ interface IPartyPlanner is IOwnable {
     /// @param kappa liquidity parameter κ in 64.64 fixed-point used to derive b = κ * S(q)
     /// @param swapFeesPpm per-asset fees in parts-per-million, taken from swap input amounts before LMSR calculations
     /// @param flashFeePpm fee in parts-per-million, taken for flash loans
-    /// @param anchorLogWeight Q64.64 ln(w_0) applied to slot 0 only — zero leaves the kernel
-    ///                       unweighted (standard LMSR). Positive values bias slot 0's marginal
-    ///                       price upward, providing a mean-reverting target inventory share of
-    ///                       w_0 / (w_0 + N - 1) at uniform inventory equilibrium. The deployer
-    ///                       is trusted to choose an appropriate value (see PartyInfo's
-    ///                       `anchorLogWeightFromTargetShare` helper).
     /// @param payer address that provides the initial token deposits
     /// @param receiver address that receives the minted LP tokens
     /// @param initialDeposits amounts of each token to deposit initially
@@ -39,7 +33,6 @@ interface IPartyPlanner is IOwnable {
         int128 kappa,
         uint256[] memory swapFeesPpm,
         uint256 flashFeePpm,
-        int128 anchorLogWeight,
         // Initial deposit information
         address payer,
         address receiver,
@@ -50,7 +43,6 @@ interface IPartyPlanner is IOwnable {
 
     /// @notice Creates a new PartyPool instance and initializes it with initial deposits (legacy signature).
     /// @dev Deprecated in favour of the kappa-based overload below; kept for backwards compatibility.
-    ///      This overload always deploys with anchorLogWeight = 0 (unweighted).
     /// @param name LP token name
     /// @param symbol LP token symbol
     /// @param tokens token addresses (n)
@@ -88,7 +80,6 @@ interface IPartyPlanner is IOwnable {
     /// @param kappa liquidity parameter κ in 64.64 fixed-point used to derive b = κ * S(q)
     /// @param swapFeePpm fee in parts-per-million, taken from swap input amounts before LMSR calculations
     /// @param flashFeePpm fee in parts-per-million, taken for flash loans
-    /// @param anchorLogWeight Q64.64 ln(w_0) for slot 0; zero ⇒ unweighted (see vector overload).
     /// @param payer address that provides the initial token deposits
     /// @param receiver address that receives the minted LP tokens
     /// @param initialDeposits amounts of each token to deposit initially
@@ -103,7 +94,6 @@ interface IPartyPlanner is IOwnable {
         int128 kappa,
         uint256 swapFeePpm,
         uint256 flashFeePpm,
-        int128 anchorLogWeight,
         // Initial deposit information
         address payer,
         address receiver,

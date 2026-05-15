@@ -113,7 +113,6 @@ contract DeploySepolia is Script {
             kappa,
             _feesPpm,
             _feePpm,
-            int128(0), // anchorLogWeight: unweighted (no slot-0 anchor bias)
             msg.sender, // payer: this script
             msg.sender,   // receiver of initial LP
             initialDeposits,

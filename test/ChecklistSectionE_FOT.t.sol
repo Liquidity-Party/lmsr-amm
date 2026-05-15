@@ -50,7 +50,7 @@ contract ChecklistSectionE_FOT_Test is Test {
         vm.expectRevert(bytes("fee-on-transfer tokens not supported"));
         planner.newPool(
             "FOT-LP", "FOTLP",
-            tokens, kappa, 1000, 1000, int128(0) /* anchorLogWeight: unweighted */,
+            tokens, kappa, 1000, 1000,
             address(this), address(this),
             deposits, 1_000_000, 0
         );

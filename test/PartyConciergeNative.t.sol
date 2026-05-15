@@ -81,7 +81,7 @@ contract PartyConciergeNativeTest is Test {
 
         (pool, ) = planner.newPool(
             "wETHpool", "WP", tokens, kappa,
-            300, 0, int128(0) /* anchorLogWeight: unweighted */,
+            300, 0,
             address(this), address(this), deposits, 0, 0
         );
 

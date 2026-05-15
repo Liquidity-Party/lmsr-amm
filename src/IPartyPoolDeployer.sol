@@ -22,10 +22,6 @@ interface IPartyPoolDeployer {
         IERC20[] tokens;
         /// @notice Liquidity parameter κ (Q64.64) used to derive b = κ * S(q)
         int128 kappa;
-        /// @notice Anchor weight ln(w_0) (Q64.64) applied to slot 0 only. Zero ⇒ unweighted LMSR.
-        ///         Positive values bias slot 0's marginal price upward, giving a mean-reverting
-        ///         inventory share of w_0 / (w_0 + N - 1) at uniform-inventory equilibrium.
-        int128 anchorLogWeight;
         /// @notice Per-asset swap fees in ppm (length must equal tokens.length)
         uint256[] fees;
         /// @notice Fee in parts-per-million, taken for flash loans

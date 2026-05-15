@@ -93,7 +93,7 @@ contract DuplicateTokenGuardTest is Test {
         vm.expectRevert();
         planner.newPool(
             "DUP", "DUP",
-            tokens, kappa, 1000, 1000, int128(0) /* anchorLogWeight: unweighted */,
+            tokens, kappa, 1000, 1000,
             address(this), address(this),
             deposits, 1e18, 0
         );
@@ -128,7 +128,7 @@ contract DuplicateTokenGuardTest is Test {
         vm.expectRevert();
         planner.newPool(
             "DUP", "DUP",
-            tokens, kappa, 1000, 1000, int128(0) /* anchorLogWeight: unweighted */,
+            tokens, kappa, 1000, 1000,
             address(this), address(this),
             deposits, 1e18, 0
         );
@@ -165,7 +165,7 @@ contract DuplicateTokenGuardTest is Test {
 
         (IPartyPool p, ) = planner.newPool(
             "OK", "OK",
-            tokens, kappa, 1000, 1000, int128(0) /* anchorLogWeight: unweighted */,
+            tokens, kappa, 1000, 1000,
             address(this), address(this),
             deposits, 1e18, 0
         );

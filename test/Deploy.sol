@@ -142,7 +142,7 @@ library Deploy {
 
         // Create pool with provided deposits. `_stable` is retained in the helper signature
         // for ABI compatibility with existing tests but is now a no-op; the planner no longer
-        // takes a stable flag. Tests get unweighted (anchorLogWeight = 0) pools by default.
+        // takes a stable flag. Tests get unweighted (kernel is unweighted) pools by default.
         _stable;
         (pool, lpTokens) = IPartyPlanner(v.planner).newPool(
             name_,
@@ -151,7 +151,6 @@ library Deploy {
             _kappa,
             _swapFeePpm,
             _flashFeePpm,
-            int128(0), // anchorLogWeight: unweighted default for test pools
             self,
             self,
             v.deposits,
@@ -213,7 +212,7 @@ library Deploy {
         }
 
         // `args.stable` is a no-op for the current planner ABI (BalancedPair deprecated).
-        // Pools deployed via this helper are unweighted (anchorLogWeight = 0).
+        // Pools deployed via this helper are unweighted (kernel is unweighted).
         args.stable;
         (pool, lpTokens) = IPartyPlanner(v.planner).newPool(
             args.name,
@@ -222,7 +221,6 @@ library Deploy {
             args.kappa,
             args.swapFeePpm,
             args.flashFeePpm,
-            int128(0), // anchorLogWeight: unweighted default for test pools
             self,
             self,
             v.deposits,

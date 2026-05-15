@@ -109,7 +109,7 @@ contract ImbalancePrecisionSweepTest is Test {
     function callSwap(int128 kappa, int128[] memory q, uint256 i, uint256 j, int128 a)
         external pure returns (int128, int128)
     {
-        return LMSRStabilized.swapAmountsForExactInput(kappa, q, i, j, a, int128(0));
+        return LMSRStabilized.swapAmountsForExactInput(kappa, q, i, j, a);
     }
 
     /// Sweep imbalance ratio from 1x (balanced) up to 1e8x. Log the residual.

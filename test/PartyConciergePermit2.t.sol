@@ -99,7 +99,7 @@ contract PartyConciergePermit2Test is Test {
         );
         (pool,) = planner.newPool(
             "WETH-USDC", "WU", tokens, kappa,
-            300, 0, int128(0) /* anchorLogWeight: unweighted */,
+            300, 0,
             address(this), address(this), deposits, 0, 0
         );
 
@@ -172,7 +172,7 @@ contract PartyConciergePermit2Test is Test {
         );
         (pool2,) = planner.newPool(
             "WETH-USDC-B", "WUB", tokens, kappa,
-            300, 0, int128(0) /* anchorLogWeight: unweighted */,
+            300, 0,
             address(this), address(this), deposits, 0, 0
         );
     }

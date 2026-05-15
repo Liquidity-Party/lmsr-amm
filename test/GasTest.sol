@@ -235,7 +235,7 @@ contract GasTest is Test {
             ierc20Tokens[i].approve(address(planner), INIT_BAL);
         }
         vm.prank(planner.owner());
-        (IPartyPool newPool, ) = planner.newPool(poolName, poolName, ierc20Tokens, computedKappa, feePpm, feePpm, int128(0) /* anchorLogWeight: unweighted */,
+        (IPartyPool newPool, ) = planner.newPool(poolName, poolName, ierc20Tokens, computedKappa, feePpm, feePpm,
             address(this), address(this), initialBalances, 0, 0);
 
         return newPool;
@@ -276,7 +276,7 @@ contract GasTest is Test {
             ierc20Tokens[i].approve(address(planner), INIT_BAL);
         }
         vm.prank(planner.owner());
-        (pool, ) = planner.newPool(poolName, poolName, ierc20Tokens, computedKappa, feePpm, feePpm, int128(0) /* anchorLogWeight: unweighted */,
+        (pool, ) = planner.newPool(poolName, poolName, ierc20Tokens, computedKappa, feePpm, feePpm,
             address(this), address(this), initialBalances, 0, 0);
     }
 
@@ -571,7 +571,7 @@ contract GasTest is Test {
         string memory poolName = string(abi.encodePacked("P2LP", vm.toString(numTokens)));
 
         vm.prank(p2Planner.owner());
-        (IPartyPool newPool, ) = p2Planner.newPool(poolName, poolName, tokens, kappa, 1000, 1000, int128(0) /* anchorLogWeight: unweighted */,
+        (IPartyPool newPool, ) = p2Planner.newPool(poolName, poolName, tokens, kappa, 1000, 1000,
             address(this), address(this), initialBalances, 0, 0);
 
         vm.startPrank(aliceP2);

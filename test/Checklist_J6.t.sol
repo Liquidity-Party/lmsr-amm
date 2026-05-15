@@ -95,7 +95,7 @@ contract ChecklistJ6Test is Test {
         uint256 requestedLp = 1_000_000 ether;
         (IPartyPool pool, uint256 lpAmount) = planner.newPool(
             "J6-LP", "J6LP",
-            tokens, _kappa(tokens.length), 1000, 1000, int128(0) /* anchorLogWeight: unweighted */,
+            tokens, _kappa(tokens.length), 1000, 1000,
             address(this), address(this),
             deposits, requestedLp, 0
         );

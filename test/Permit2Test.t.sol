@@ -125,7 +125,7 @@ contract Permit2Test is Test {
         );
         (pool, ) = planner.newPool(
             "Permit2Pool", "P2P", tokens, kappa,
-            300, 0, int128(0) /* anchorLogWeight: unweighted */,
+            300, 0,
             address(this), address(this), deposits, 0, 0
         );
 

@@ -157,17 +157,4 @@ interface IPartyInfo {
     /// @param amount The amount of tokens lent.
     /// @return fee The amount of `token` charged on top of the returned principal.
     function flashFee(IPartyPool pool, address token, uint256 amount) external view returns (uint256 fee);
-
-    // -------------------------------------------------------------------------
-    // Anchor-weight deployer helper
-    // -------------------------------------------------------------------------
-
-    /// @notice Pre-deployment helper: compute the `anchorLogWeight` (ln(w_0) Q64.64) that
-    ///         causes slot 0's marginal price share at uniform inventory to equal `targetShare`.
-    /// @dev Implements `w_0 = (N-1) · s* / (1 - s*)`, then returns `ln(w_0)`. Pass the result
-    ///      to `PartyPlanner.newPool` as the `anchorLogWeight` argument. Pass `targetShare`
-    ///      = 1/N (Q64.64) to recover the unweighted symmetric kernel (returns 0).
-    /// @param n Total slot count (>= 2).
-    /// @param targetShare Slot-0 share at uniform inventory in Q64.64; must be in (0, 1).
-    function anchorLogWeightFromTargetShare(uint256 n, int128 targetShare) external pure returns (int128);
 }

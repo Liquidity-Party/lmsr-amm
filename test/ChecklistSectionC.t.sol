@@ -288,7 +288,7 @@ contract ChecklistSectionC is Test {
         // Deploy succeeds (strict-equality check passes since hookToken doesn't divert tokens).
         (IPartyPool hookPool,) = planner2.newPool(
             "HOOK-LP", "HKLP",
-            tokens, kappa, 1000, 1000, int128(0) /* anchorLogWeight: unweighted */,
+            tokens, kappa, 1000, 1000,
             address(this), address(this),
             deposits, INIT_BAL * 2, 0
         );

@@ -43,7 +43,7 @@ contract ConciergeBenchTest is Test {
 
         int128 kappa = LMSRStabilized.computeKappaFromSlippage(numTokens, tradeFrac, targetSlippage);
         string memory poolName = string(abi.encodePacked("LP", vm.toString(numTokens)));
-        (pool,) = planner.newPool(poolName, poolName, tokens, kappa, 1000, 1000, int128(0) /* anchorLogWeight: unweighted */,
+        (pool,) = planner.newPool(poolName, poolName, tokens, kappa, 1000, 1000,
             address(this), address(this), deposits, 0, 0);
 
         // Alice approves concierge for all tokens and LP

@@ -87,7 +87,7 @@ contract ChecklistSectionDTest is Test {
         uint256 requestedLp = 1_000_000;
         (IPartyPool pool, uint256 lpAmount) = planner.newPool(
             "D8-LP", "D8LP",
-            tokens, kappa, 1000, 1000, int128(0) /* anchorLogWeight: unweighted */,
+            tokens, kappa, 1000, 1000,
             address(this), address(this),
             deposits, requestedLp, 0
         );
@@ -151,7 +151,7 @@ contract ChecklistSectionDTest is Test {
         uint256 requestedLp = 1_000_000;
         (IPartyPool pool, uint256 lpAmount) = planner.newPool(
             "D8-LP", "D8LP",
-            tokens, kappa, 1000, 1000, int128(0) /* anchorLogWeight: unweighted */,
+            tokens, kappa, 1000, 1000,
             address(this), address(this),
             deposits, requestedLp, 0
         );
