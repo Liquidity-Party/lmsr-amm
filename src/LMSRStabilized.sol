@@ -421,48 +421,154 @@ library LMSRStabilized {
             unchecked { k++; }
         }
 
+        // ============================================================================
+        // Rounding policy (LP-favor):
+        // We MUST return an `amountIn` that is ≥ the exact cost of acquiring β·q_j of
+        // every j≠i. Under-charging the depositor by even sub-ulp amounts compounds
+        // across flash-loan-amplified call sequences, so every Q64.64 operation below
+        // is forced to round in the direction that increases the final `amountIn`.
+        //
+        // The exact-out Hanson cost per leg is
+        //     xj = b · ln( r0 / (r0 + 1 − E) )       with r0 = exp(qDiffJI/b), E = exp(yj/b).
+        // Partials:
+        //     ∂xj/∂r0 = (1−E) / [(r0+1−E)·r0]  < 0   (E > 1 ⇒ smaller r0 ⇒ larger xj)
+        //     ∂xj/∂E  = 1 / (r0+1−E)            > 0   (larger E ⇒ larger xj)
+        //     ∂xj/∂b > 0 (b is an overall scale).
+        // Therefore LP-favor = {floor r0, ceil E, ceil the (numer = r0/rhs) ratio,
+        //                       ceil ln(numer), ceil b·ln(numer)}.
+        // ABDK's natural floor on `r0` already pushes in the LP-favor direction; every
+        // other rounded primitive below uses _ceilMul / _ceilDiv / _ceilExp / _ceilLn.
+        // ============================================================================
         int128 sumX = int128(0);
         for (uint256 j = 0; j < n; ) {
             if (j != i) {
                 int128 yj = beta.mul(qInternal[j]);
                 if (yj > int128(0)) {
-                    // Per-step Hanson exact-out at current qLocal with current state-dep b.
-                    // sizeMetric, b, invB, r0, E all recomputed each step (b evolves).
+                    // Per-step Hanson exact-out at current qLocal with state-dep b.
+                    // sizeMetric, b, invB are recomputed each step (b evolves through the
+                    // chain). `sizeMetric` is exactly Σ qLocal — addition is bit-exact in
+                    // int128 within range, so no rounding direction to police here.
                     int128 sizeMetric = _computeSizeMetric(qLocal);
                     require(sizeMetric > int128(0), "too large");
                     int128 b = kappa.mul(sizeMetric);
                     require(b > int128(0), "too large");
+                    // invB = 1/b. ABDK div floors. A smaller invB pulls (yj·invB) and
+                    // (qDiffJI·invB) toward zero — for the qDiffJI < 0 leg that means
+                    // smaller |arg|, thus larger r0, which is *swapper-favor*. We
+                    // compensate at the *consumer* sites: r0 stays floored via natural
+                    // exp (LP-favor), and we explicitly ceil `expArg = yj·invB` below
+                    // so E rounds up. Floored invB is therefore safe at the source.
                     int128 invB = ABDKMath64x64.div(ONE, b);
 
                     // qDiff_eff for the j→i leg: q_j - q_i with slot-0 weight applied.
+                    // Subtraction is exact. The anchor `shift = b·anchorLogWeight` is
+                    // direction-sensitive: it appears as +shift when i==0 (slot 0 is
+                    // the input, and the kernel substitutes q'_0 = q_0 − shift, so
+                    // qDiff = q_j − q'_0 = qDiff + shift), and as −shift when j==0
+                    // (qDiff = q'_0 − q_i = qDiff − shift). For LP-favor on this leg
+                    // we want qDiffJI as SMALL as possible (→ smaller r0 → larger xj):
+                    //   * i==0  (add shift)  →  pick the SMALLEST representable shift
+                    //                           → natural floor mul.
+                    //   * j==0  (sub shift)  →  pick the LARGEST representable shift
+                    //                           → _ceilMul, so the subtraction shrinks
+                    //                             qDiffJI maximally.
                     int128 qDiffJI = qLocal[j].sub(qLocal[i]);
                     if (anchorLogWeight != int128(0)) {
-                        int128 shift = b.mul(anchorLogWeight);
-                        if (i == 0) qDiffJI = qDiffJI.add(shift);
-                        else if (j == 0) qDiffJI = qDiffJI.sub(shift);
+                        if (i == 0) qDiffJI = qDiffJI.add(b.mul(anchorLogWeight));
+                        else if (j == 0) qDiffJI = qDiffJI.sub(_ceilMul(b, anchorLogWeight));
                     }
+                    // qDiffJI·invB. ABDK mul arithmetic-shifts: it floors toward −∞ for
+                    // BOTH signs. We want a SMALLER (more negative or smaller-positive)
+                    // qDiffJIOverB because exp is monotone increasing — smaller arg
+                    // means smaller r0 means larger xj (LP-favor). Floor toward −∞
+                    // satisfies that for both signs without needing a sign split.
                     int128 qDiffJIOverB = qDiffJI.mul(invB);
+
                     if (qDiffJIOverB > EXP_LIMIT) {
-                        // q_j >> q_i: r0 = exp((q_j-q_i)/b) would overflow.
-                        // The exact-out cost xj = b·ln(r0/(r0+1-E)) → b·ln(1) = 0 as r0 → ∞.
-                        // Asset j is so abundant relative to i that acquiring yj of j costs
-                        // nothing in terms of i. Apply the state update with zero cost so that
-                        // subsequent iterations see the correct chain state (pool gave away yj of j).
+                        // q_j ≫ q_i: r0 = exp(qDiff/b) is unrepresentable. Naively
+                        // skipping with xj = 0 (the r0 → ∞ limit) is UNSAFE: when
+                        // yj/b is itself near EXP_LIMIT, the exact xj is NOT sub-ulp.
+                        // E.g. with qDiff/b and yj/b both ≈ 32, rhs = r0 + 1 − E
+                        // collapses toward 1 and xj ≈ b · ln(r0) ≈ 32·b. A flash-loan
+                        // attacker who skews the pool and picks β to maximize yj/b
+                        // would otherwise mint LP for free in that regime.
+                        //
+                        // Numerically-stable upper bound:
+                        //   xj = -b · ln(1 − z),   z := (E − 1) · exp(−qDiff/b),
+                        // where z ∈ (0, 1) iff the trade is feasible (rhs > 0).
+                        // exp(−qDiff/b) is representable for any qDiff/b > 32 (it
+                        // decays toward 0), so we can compute z without overflow.
+                        // Every step below rounds UP on the LP-favoring side:
+                        //   • expArg ceiled                → E larger
+                        //   • E via _ceilExp               → E larger
+                        //   • exp(−qDiff/b) via _ceilExp   → z larger
+                        //   • z via _ceilMul               → z larger
+                        //   • 1−z is exact (subtraction)   → 1−z smaller
+                        //   • _ceilDiv(1, 1−z)             → safeNumer larger
+                        //   • _ceilLn(safeNumer)           → ln larger
+                        //   • _ceilMul(b, lnSafe)          → xj larger
+                        //   • +1 final ulp cushion         → covers compounded
+                        //                                    rounding remainders.
+                        int128 expArg = _ceilMul(yj, invB);
+                        require(expArg <= EXP_LIMIT, "too large");
+                        int128 E = _ceilExp(expArg);
+                        require(E > ONE, "too large"); // yj > 0 implies E > 1; defensive
+                        int128 EMinusOne = E.sub(ONE);
+                        // exp(−qDiff/b) with qDiff/b > 32 is ≤ exp(−32) ≈ 1.3e-14 of
+                        // Q64.64, comfortably within int128 — even saturating the
+                        // _ceilExp +1 ulp does not overflow.
+                        int128 expNegQDiff = _ceilExp(qDiffJIOverB.neg());
+                        int128 z = _ceilMul(EMinusOne, expNegQDiff);
+                        // Feasibility: in the exact arithmetic z < 1 iff rhs > 0. If
+                        // our rounded-up z is ≥ 1 we cannot bound xj finitely, which
+                        // signals the trade is at (or past) the asymptotic capacity
+                        // boundary of asset j — revert. This is the LP-safe choice
+                        // (refuse the trade rather than emit a finite under-estimate).
+                        require(z < ONE, "too large");
+                        int128 oneMinusZ = ONE.sub(z);
+                        int128 safeNumer = _ceilDiv(ONE, oneMinusZ);
+                        int128 lnSafe = _ceilLn(safeNumer);
+                        int128 xjBound = _ceilMul(b, lnSafe);
+                        // Final 1-ulp cushion to swallow any residual from the
+                        // higher-order ln(1−z) terms we dropped in the asymptotic
+                        // upper bound — empirically the ceil chain already covers
+                        // them, but the cushion makes the LP-favor invariant
+                        // independent of any future ABDK-level rounding change.
+                        if (xjBound < int128(type(int128).max)) xjBound = xjBound + 1;
+
+                        sumX = sumX.add(xjBound);
+                        qLocal[i] = qLocal[i].add(xjBound);
                         qLocal[j] = qLocal[j].sub(yj);
                         require(qLocal[j] > int128(0), "too large");
-                        // xj = 0: no sumX contribution, qLocal[i] unchanged
                         unchecked { j++; }
                         continue;
                     }
+
+                    // r0 = exp(qDiffJI/b). ABDK exp floors → r0 smaller → larger xj. ✓
                     int128 r0 = _exp(qDiffJIOverB);
-                    int128 expArg = yj.mul(invB);
+                    // expArg = yj/b. We want LARGER E, so push expArg UP via _ceilMul.
+                    // (yj and invB are both positive; ceil is well-defined.)
+                    int128 expArg = _ceilMul(yj, invB);
                     require(expArg <= EXP_LIMIT, "too large");
-                    int128 E = _exp(expArg);
+                    // E = exp(expArg). ABDK exp floors — bump by 1 ulp via _ceilExp
+                    // so the rhs = r0 + 1 − E shrinks (we subtract a larger E),
+                    // numer = r0/rhs grows, xj grows. LP-favor.
+                    int128 E = _ceilExp(expArg);
+                    // rhs = r0 + 1 − E. add/sub are exact: rhs is the smallest value
+                    // consistent with our (floored r0, ceiled E) — directly LP-favor.
                     int128 rhs = r0.add(ONE).sub(E);
                     require(rhs > int128(0), "too large");
-                    int128 numer = r0.div(rhs);
+                    // numer = r0/rhs. ABDK div floors → smaller numer → smaller xj
+                    // (swapper-favor). Use _ceilDiv to push numer UP → larger xj.
+                    int128 numer = _ceilDiv(r0, rhs);
                     require(numer > int128(0), "too large");
-                    int128 xj = b.mul(_ln(numer));
+                    // _ceilLn ensures the log step rounds UP, then _ceilMul ensures
+                    // the final scale by b also rounds UP. Both swapper-favoring
+                    // ABDK floors are reversed by the ceil helpers.
+                    int128 xj = _ceilMul(b, _ceilLn(numer));
+                    // Defensive: ceil chain cannot produce 0 for a feasible trade
+                    // (numer > 1 ⇒ lnSafe ≥ 1 ulp ⇒ xj ≥ 1 ulp). The require keeps
+                    // the loop-monotonicity contract intact.
                     require(xj > int128(0), "too large");
 
                     sumX = sumX.add(xj);
@@ -474,18 +580,29 @@ library LMSRStabilized {
             unchecked { j++; }
         }
 
+        // Final amountIn = (β·q_i + Σxj) / (1−β). β·q_i uses _ceilMul (LP-favor on the
+        // proportional-input leg). sumX is already an upper bound by construction.
+        // 1−β is exact. The outer division uses _ceilDiv so the entire amountIn is the
+        // smallest representable Q64.64 ≥ exact_amountIn.
         int128 oneMinusBeta = ONE.sub(beta);
         require(oneMinusBeta > int128(0), "too large");
-        amountIn = beta.mul(q_i_orig).add(sumX).div(oneMinusBeta);
+        amountIn = _ceilDiv(_ceilMul(beta, q_i_orig).add(sumX), oneMinusBeta);
         require(amountIn > int128(0), "too small");
     }
 
     // ---- Ceiling helpers for Q64.64 fixed-point arithmetic ----
-    // ABDK's mul/div floor (truncate toward zero for positive operands). The kernel uses
-    // these to round each intermediate in the pool-favoring direction so that the
-    // solver returns the smallest β consistent with a ≤ a_max.
+    //
+    // ABDK's mul/div/exp/ln all FLOOR their result (truncate toward zero for non-negative
+    // operands, toward -infinity for arithmetic-shifted intermediates). Because every
+    // chained Hanson cost expression in mint/burn (xj, amountInUsed, the per-leg cushion
+    // in the EXP_LIMIT branch) must round in the LP-favoring direction under all signs
+    // of input, we explicitly ceil the operations whose floored direction would shave a
+    // sub-ulp gift to the swapper. The ceil helpers ALL round their result UP by up to
+    // 1 ulp of Q64.64 (≤ 2^{-64} of the represented real value). Used only inside the
+    // mint/burn solvers; the wider kernel is unaffected.
 
-    /// @dev Ceiling Q64.64 multiply for non-negative operands.
+    /// @dev Ceiling Q64.64 multiply for non-negative operands. Result is the smallest
+    ///      representable Q64.64 value ≥ the exact mathematical product.
     function _ceilMul(int128 x, int128 y) internal pure returns (int128) {
         if (x == 0 || y == 0) return 0;
         int256 product = int256(x) * int256(y);
@@ -494,7 +611,8 @@ library LMSRStabilized {
         return int128(result);
     }
 
-    /// @dev Ceiling Q64.64 divide for non-negative operands.
+    /// @dev Ceiling Q64.64 divide for non-negative operands. Result is the smallest
+    ///      representable Q64.64 value ≥ the exact mathematical quotient.
     function _ceilDiv(int128 x, int128 y) internal pure returns (int128) {
         require(y > 0, "_ceilDiv: y<=0");
         if (x <= 0) return 0;
@@ -502,6 +620,26 @@ library LMSRStabilized {
         int256 result = (numerator + int256(y) - 1) / int256(y);
         require(result <= int256(type(int128).max), "_ceilDiv overflow");
         return int128(result);
+    }
+
+    /// @dev Upper-bound exp: ABDK's `exp` floors. Adding 1 ulp guarantees the returned
+    ///      value is ≥ the true exp(x). When the natural exp already saturates to
+    ///      int128.max we leave it (further bumping would overflow); callers that need
+    ///      a hard cap on the input must enforce x ≤ EXP_LIMIT independently. The
+    ///      worst-case overshoot is 1 ulp of Q64.64 ≈ 5.4e-20 of the represented value.
+    function _ceilExp(int128 x) internal pure returns (int128) {
+        int128 e = ABDKMath64x64.exp(x);
+        if (e < int128(type(int128).max)) e = e + 1;
+        return e;
+    }
+
+    /// @dev Upper-bound ln: ABDK's `ln` floors. Adding 1 ulp guarantees the returned
+    ///      value is ≥ the true ln(x). Requires x > 0 (passed through ABDK). The
+    ///      worst-case overshoot is 1 ulp of Q64.64 ≈ 5.4e-20 of the represented value.
+    function _ceilLn(int128 x) internal pure returns (int128) {
+        int128 l = ABDKMath64x64.ln(x);
+        if (l < int128(type(int128).max)) l = l + 1;
+        return l;
     }
 
     /// @notice Compute single-asset payout when burning a proportional share alpha of the pool.
@@ -551,12 +689,15 @@ library LMSRStabilized {
 
         uint256 n = qInternal.length;
 
-        // amountIn (LP size-metric redeemed) is based on the pre-burn state.
-        amountIn = alpha.mul(sizeMetricInit);
+        // amountIn is the LP-size metric redeemed (α · S). This is what the burner gives
+        // up; for LP-favor it should not be UNDER-reported (otherwise the wrapper would
+        // charge them too little LP for the asset payout). ABDK mul floors → smaller →
+        // under-reports the LP burn → swapper-favor. Use _ceilMul to over-report.
+        amountIn = _ceilMul(alpha, sizeMetricInit);
 
-        // Build q_local := q_after_burn = (1 - alpha) * q
-        // This is the post-burn pool state into which we then swap the withdrawn
-        // baskets back to asset i (multi-step, with b recomputed per step from qLocal).
+        // Build q_local := q_after_burn = (1 − α) · q. This is the post-burn pool state
+        // that all subsequent j→i sub-swaps run against. ABDK mul floors → smaller qLocal
+        // → smaller r0_j later → smaller y → LP-favor. Floor is correct here.
         int128 oneMinusAlpha = ONE.sub(alpha);
         int128[] memory qLocal = new int128[](n);
         for (uint256 k = 0; k < n; ) {
@@ -564,20 +705,36 @@ library LMSRStabilized {
             unchecked { k++; }
         }
 
-        // Start totalOut with direct portion of asset i redeemed (proportional share).
+        // Direct payout: α · q_i is the proportional share of asset i. The burner
+        // RECEIVES this, so we must NOT over-pay them — floor (natural mul) is LP-favor.
         amountOut = alpha.mul(qInternal[i]);
 
         bool anyNonZero = (amountOut > int128(0));
 
-        // For each asset j != i, swap the withdrawn a_j := alpha * q_j into i,
-        // using b derived from the CURRENT qLocal at each chain step.
+        // ============================================================================
+        // Rounding policy (LP-favor):
+        // Per j ≠ i we compute y = b · ln(1 + r0_j · (1 − exp(−aj/b))) (Hanson exact-in)
+        // and add it to amountOut. The pool absorbs aj (in simulation) and pays out y.
+        // Partials:
+        //     ∂y/∂r0_j   > 0    smaller r0_j ⇒ smaller y ⇒ LP-favor
+        //     ∂y/∂expNeg < 0    larger expNeg ⇒ smaller y ⇒ LP-favor
+        //     ∂y/∂b      > 0    smaller b ⇒ smaller y, but b is determined by qLocal
+        //                       (already floored above).
+        // ABDK's floor on r0_j, on r0_j.mul(...), on _ln(inner), and on b.mul(_ln(inner))
+        // is uniformly LP-favoring. The only PRIMITIVE that goes the wrong way is
+        // exp(−aj/b): ABDK floors that, but we want it ceiled (larger expNeg ⇒ smaller y).
+        // That fix is the +1 ulp bump on `expNeg` below.
+        //
+        // The cap-hit branch and EXP_LIMIT cap-everything branch invert the polarity:
+        // there we want `amountInUsed` to be an UPPER bound on what the pool absorbs
+        // (so that subsequent chain steps see a LARGER qLocal[j] → SMALLER r0_j′ →
+        // SMALLER subsequent y). Those branches use the _ceil* helpers explicitly.
+        // ============================================================================
         for (uint256 j = 0; j < n; ) {
             if (j != i) {
                 int128 aj = alpha.mul(qInternal[j]); // wrapper-held withdrawn amount of j
                 if (aj > int128(0)) {
-                    // Recompute b and invB at the current chain state. This is the
-                    // multi-step (state-dependent b) leg: matches a sequence of
-                    // single-asset swaps each evaluated against the live pool.
+                    // Recompute b and invB at the current chain state.
                     int128 sizeMetric = _computeSizeMetric(qLocal);
                     if (sizeMetric <= int128(0)) {
                         unchecked { j++; }
@@ -588,48 +745,89 @@ library LMSRStabilized {
                         unchecked { j++; }
                         continue;
                     }
+                    // invB = 1/b. ABDK div floors. Floored invB ⇒ smaller (aj·invB) ⇒
+                    // smaller exp arg ⇒ (since we take its NEGATION as the exp input)
+                    // less-negative arg ⇒ LARGER expNeg ⇒ smaller y. LP-favor.
                     int128 invB = ABDKMath64x64.div(ONE, b);
 
+                    // expArg = aj/b. ABDK mul floors → smaller expArg → larger expNeg
+                    // (since expNeg = exp(−expArg) is decreasing in expArg). LP-favor.
                     int128 expArg = aj.mul(invB);
-                    // expArg is a/b where a = alpha*q_j (withdrawn). The subsequent exp call is
-                    // _exp(expArg.neg()) = exp(-a/b), which cannot overflow: exp(-32) ≈ 1.27e-14
-                    // fits in Q64.64. For very large expArg the result naturally underflows toward
-                    // 0 (correct limit). No guard needed here — unlike swap/mint that compute
-                    // exp(+a/b) which would overflow.
+                    // exp(−aj/b) cannot overflow: argument is ≤ 0, output is in (0, 1].
+                    // For aj/b ≫ 32 the result naturally underflows toward 0 in Q64.64;
+                    // we cushion via the +1 ulp bump below so that even an underflowed
+                    // expNeg is treated as if it were strictly positive.
 
-                    // r0_j = exp((q_local[i] - q_local[j]) / b) = e_i / e_j. With slot-0 weight,
-                    // the effective q_0 inside the LSE is q_0 - b·anchorLogWeight, which makes
-                    // r0_j pick up a (w_i/w_j) factor: when i==0, qDiff_eff = qDiff - b·alw;
-                    // when j==0, qDiff_eff = qDiff + b·alw.
+                    // qDiff_eff = q_local[i] − q_local[j], with slot-0 anchor weighted in.
+                    // When `i == 0` we subtract `shift` (slot 0 is OUTPUT side), and we
+                    // want qDiffIJ as SMALL as possible (smaller r0_j ⇒ smaller y) — so
+                    // we want shift as LARGE as possible → _ceilMul.
+                    // When `j == 0` we ADD `shift` (slot 0 is INPUT side), and again we
+                    // want qDiffIJ as small as possible — so shift as SMALL as possible →
+                    // natural floor mul.
+                    // The asymmetry in `_ceilMul`/`mul` here is the mirror image of the
+                    // mint-side split: same goal (minimize the effective qDiff), opposite
+                    // sign convention.
                     int128 qDiffIJ = qLocal[i].sub(qLocal[j]);
                     if (anchorLogWeight != int128(0)) {
-                        int128 shift = b.mul(anchorLogWeight);
-                        if (i == 0) qDiffIJ = qDiffIJ.sub(shift);
-                        else if (j == 0) qDiffIJ = qDiffIJ.add(shift);
+                        if (i == 0) qDiffIJ = qDiffIJ.sub(_ceilMul(b, anchorLogWeight));
+                        else if (j == 0) qDiffIJ = qDiffIJ.add(b.mul(anchorLogWeight));
                     }
+                    // qDiffIJ·invB. Floor toward −∞ (ABDK mul) gives SMALLER value for
+                    // both signs → smaller r0_j → smaller y → LP-favor. No sign split.
                     int128 qDiffOverB = qDiffIJ.mul(invB);
+
                     if (qDiffOverB > EXP_LIMIT) {
-                        // r0_j would overflow (q_i >> q_j): asset i is so cheap that even a tiny
-                        // amount of a_j buys all of qLocal[i]. Cap immediately; amountInUsed → 0
-                        // as r0_j → ∞, so the pool absorbs none of asset j.
-                        int128 capAmount = qLocal[i];
+                        // q_i ≫ q_j: r0_j = exp(qDiff/b) is unrepresentable. The exact
+                        // y → ∞ (Hanson exact-in saturates), so the only meaningful cap
+                        // is the pool's available qLocal[i]. We pay capAmount to the
+                        // burner; the simulated amountInUsed → 0 as r0_j → ∞, so we do
+                        // NOT update qLocal[j] (consistent with the asymptotic limit and
+                        // with the fact that the actual burnSwap impl never deposits
+                        // asset j into the pool either — see PartyPoolMintImpl.burnSwap).
+                        //
+                        // LP-favor cushion: shave 1 ulp off the cap so the burner gets
+                        // strictly less than the full simulation result. This is sub-2^{-64}
+                        // of qLocal[i] but closes the explicit-rounding invariant for
+                        // this branch and prevents flash-loan-amplified leakage of the
+                        // exact representation.
+                        int128 capAmount = qLocal[i] > int128(0)
+                            ? qLocal[i].sub(int128(1))
+                            : int128(0);
                         qLocal[i] = int128(0);
-                        amountOut = amountOut.add(capAmount);
-                        anyNonZero = true;
+                        if (capAmount > int128(0)) {
+                            amountOut = amountOut.add(capAmount);
+                            anyNonZero = true;
+                        }
                         unchecked { j++; }
                         continue;
                     }
+                    // r0_j = exp(qDiff/b). ABDK exp floors → smaller r0_j → smaller y.
+                    // LP-favor. No ceil here — we WANT floor.
                     int128 r0_j = _exp(qDiffOverB);
 
-                    // closed-form amountOut candidate (Hanson exact-in):
-                    // y = b * ln(1 + r0 * (1 - exp(-a/b)))
-                    // ABDK's `_exp` floors; bump expNeg by 1 ulp so (1 - expNeg)
-                    // rounds toward zero — pool-favor bias on the payout.
+                    // closed-form payout candidate (Hanson exact-in):
+                    // y = b · ln(1 + r0_j · (1 − exp(−aj/b)))
+                    // Step-by-step rounding directions:
+                    //   • expNeg = _exp(−expArg): floors. We want LARGER expNeg so
+                    //     (1 − expNeg) is SMALLER → smaller inner → smaller y. Bump
+                    //     expNeg up by 1 ulp.
+                    //   • ONE.sub(expNeg): exact (subtraction). Inherits the bump.
+                    //   • r0_j.mul(ONE.sub(expNeg)): ABDK mul floors → smaller → smaller
+                    //     inner → smaller y. LP-favor naturally.
+                    //   • ONE.add(...) inner: exact.
+                    //   • _ln(inner): ABDK ln floors → smaller → smaller y. LP-favor.
+                    //   • b.mul(_ln(inner)): ABDK mul floors → smaller y. LP-favor.
+                    // Every primitive after `expNeg` floors in the LP-favor direction.
                     int128 expNeg = _exp(expArg.neg());
                     if (expNeg < int128(type(int128).max)) expNeg = expNeg + 1;
                     int128 inner = ONE.add(r0_j.mul(ONE.sub(expNeg)));
 
                     if (inner <= int128(0)) {
+                        // ONE.sub(expNeg) can be 0 when expNeg ≥ ONE (i.e. exp(−aj/b)
+                        // saturated to 1 due to aj being non-positive in ulp terms).
+                        // r0_j · 0 = 0 ⇒ inner = ONE. But if any intermediate underflow
+                        // produced inner ≤ 0, skip the leg (zero contribution).
                         unchecked { j++; }
                         continue;
                     }
@@ -637,22 +835,53 @@ library LMSRStabilized {
                     int128 y = b.mul(_ln(inner));
 
                     if (y > qLocal[i]) {
-                        // Cap output to qLocal[i]; solve inverse for input used.
-                        int128 E = _exp(qLocal[i].mul(invB));
+                        // Cap-hit branch: the closed-form y exceeds the pool's available
+                        // asset i, so we cap output to qLocal[i] and solve INVERSE-Hanson
+                        // for the input that the pool would absorb (amountInUsed).
+                        // Polarity inversion vs. the main path: here we want
+                        // amountInUsed to be an UPPER bound (over-state how much the
+                        // pool ate, so qLocal[j] grows MORE, suppressing subsequent
+                        // legs that would otherwise leak additional payout). Every
+                        // step ceils in the LP-favor direction:
+                        //   • expArg = ceilMul(qLocal[i], invB)         → larger
+                        //   • E = ceilExp(expArg)                       → larger
+                        //   • rhs = r0_j + 1 − E                        → smaller
+                        //   • numer = ceilDiv(r0_j, rhs)                → larger
+                        //   • lnSafe = ceilLn(numer)                    → larger
+                        //   • amountInUsed = ceilMul(b, lnSafe)         → larger
+                        // For the payout side we shave 1 ulp off qLocal[i] (cushion).
+                        int128 expArgCap = _ceilMul(qLocal[i], invB);
+                        require(expArgCap <= EXP_LIMIT, "too large");
+                        int128 E = _ceilExp(expArgCap);
                         int128 rhs = r0_j.add(ONE).sub(E);
-                        if (rhs <= int128(0)) {
-                            unchecked { j++; }
-                            continue;
+                        // amountInUsed defaults to 0 when the rounded cap-hit math is
+                        // degenerate (rhs ≤ 0 or numerCap ≤ ONE). Those are borderline
+                        // cases where y was barely > qLocal[i] under exact arithmetic;
+                        // ceiling E to round LP-favor pushes them past the boundary.
+                        // We still pay capAmount (the cap-hit branch *did* fire on the
+                        // floored main-path y), but skip the qLocal[j] over-state for
+                        // subsequent legs because we cannot bound it reliably here.
+                        int128 amountInUsed = int128(0);
+                        if (rhs > int128(0)) {
+                            int128 numerCap = _ceilDiv(r0_j, rhs);
+                            if (numerCap > ONE) {
+                                amountInUsed = _ceilMul(b, _ceilLn(numerCap));
+                            }
                         }
-                        int128 amountInUsed = b.mul(_ln(r0_j.div(rhs)));
                         qLocal[j] = qLocal[j].add(amountInUsed);
-                        amountOut = amountOut.add(qLocal[i]);
+                        int128 capAmount = qLocal[i].sub(int128(1));
+                        if (capAmount > int128(0)) {
+                            amountOut = amountOut.add(capAmount);
+                            anyNonZero = true;
+                        }
                         qLocal[i] = int128(0);
-                        anyNonZero = true;
                         unchecked { j++; }
                         continue;
                     }
 
+                    // Normal-path state update: pool gains aj of j, loses y of i.
+                    // y was computed entirely with LP-favoring floors above, so the
+                    // amountOut increment is already a lower bound on the exact payout.
                     qLocal[j] = qLocal[j].add(aj);
                     qLocal[i] = qLocal[i].sub(y);
                     amountOut = amountOut.add(y);
