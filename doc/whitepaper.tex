@@ -1,0 +1,1317 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{mathtools}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage[hidelinks]{hyperref}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  showstringspaces=false,
+  columns=fullflexible,
+}
+
+\newcommand{\stub}[1]{\textbf{[STUB: #1]}}
+\newcommand{\Sm}{S(\mathbf{q})}
+\newcommand{\bofq}{b(\mathbf{q})}
+
+\title{Liquidity Party\\
+       \large A Multi-Asset Logarithmic Market Scoring Rule AMM\\
+       \large Deployment Whitepaper}
+\author{Liquidity Party}
+\date{Draft --- \stub{Publication date}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Liquidity Party is a permissioned-deploy, non-upgradeable multi-asset
+automated market maker built for liquidity providers. Every rounding,
+approximation, and capacity decision in the system is biased strictly in
+favor of LPs: the swap kernel never pays a trader more than the true
+liquidity-sensitive LMSR mapping would, every Q64.64 primitive in the
+single-asset chains is wrapped with ceiling helpers that restore LP-favor
+where ABDK's default floor would leak a sub-ulp gift to the swapper, and
+every fee/protocol-share rounding decision rounds up for the pool and down
+for the protocol. The pricing kernel is the Logarithmic Market Scoring Rule
+(LMSR) with the liquidity parameter tied to pool size as $\bofq = \kappa\,\Sm$,
+giving a scale-invariant pool whose maximum LP loss is bounded by
+$\kappa\,\Sm\,\ln n$. Swaps execute against a two-pass midpoint-$b$
+approximation of the path-exact LS-LMSR cost function with a one-sided
+LP-safety guarantee (\S\ref{sec:lp-safety}); single-asset deposits
+(\texttt{swapMint}) and single-asset withdrawals (\texttt{burnSwap}) replicate
+the externally observable price path by composing the fee-free kernel against
+a mutating local state, eliminating the round-trip drift that frozen-$b$
+Hanson incurs. Pool parameters are immutable post-deployment; the only
+mutable admin lever on a live pool is the protocol-fee recipient and the
+irreversible \texttt{kill()} switch. The admin cannot mint LP, change fees,
+freeze users, or move pool reserves --- a leaked admin key presents little to
+no danger to LPs (\S\ref{sec:admin-risk}). Pool creation is restricted to the
+trusted operator, who is responsible for upstream token vetting via a
+documented validator pipeline. This document specifies the pricing kernel
+and liquidity operations, the production fee structure, the admin and
+deployment surface, and the security-review methodology applied prior to
+launch, all framed for an LP audience.
+\end{abstract}
+
+\tableofcontents
+
+\section{Overview}
+\label{sec:overview}
+
+Liquidity Party is a multi-asset AMM that supports up to $n \le 383$ tokens in
+a single pool and quotes every pair within that pool from a single convex
+potential. The system is designed for capital efficiency on long-tail asset
+baskets: an $n$-asset pool exposes $n(n-1)/2$ pairs with one set of LP shares,
+eliminating the fragmentation cost of pairwise CFMM deployments. Approximate
+gas costs for production-typical operations are summarized in
+Table~\ref{tab:gas}.
+
+\begin{table}[h]
+\centering
+\caption{Approximate gas costs by pool size}
+\label{tab:gas}
+\begin{tabular}{rrrrr}
+\toprule
+Assets & Pairs & Swap & Mint & \texttt{swapMint} \\
+\midrule
+ 2 &    1 & 127{,}000 &   144{,}000 &   150{,}000 \\
+10 &   45 & 139{,}000 &   412{,}000 &   370{,}000 \\
+20 &  190 & 154{,}000 &   746{,}000 &   694{,}000 \\
+50 & 1225 & 199{,}000 & 1{,}751{,}000 & 2{,}000{,}000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{System layout.}
+The on-chain system consists of four singleton-or-immutable contracts:
+
+\begin{itemize}
+  \item \texttt{PartyPlanner} --- factory and pool registry. \texttt{onlyOwner}
+        \texttt{newPool} deploys each \texttt{PartyPool} via \texttt{CREATE2}
+        with caller-specified $(\kappa, f, f_{\mathrm{flash}})$. Indexes pools
+        by token for off-chain discovery.
+  \item \texttt{PartyPool} --- the pool itself, holding token reserves and
+        issuing an ERC-20 LP share token. The pool is a non-upgradeable
+        \texttt{DELEGATECALL} proxy over two implementation libraries
+        (\texttt{PartyPoolMintImpl}, \texttt{PartyPoolExtraImpl}) due to the
+        EIP-170 24~KB contract-size cap.
+  \item \texttt{PartyInfo} --- read-only view contract for prices, quotes, and
+        denominators. Pricing helpers are exposed here rather than on the pool
+        so that \texttt{PartyPool} fits its size budget.
+  \item \texttt{PartyConcierge} --- user-facing router. Takes token addresses
+        rather than indices, supports a single ERC-20 approval covering every
+        pool, and exposes an EIP-7730 clear-signing surface. Funds pools via
+        the callback funding mode (see \S\ref{sec:funding}).
+\end{itemize}
+
+The pool's per-token configuration (bases and per-asset fee rates) is stored
+in an SSTORE2-style data contract referenced by an immutable address in the
+pool. Hot paths read it via \texttt{EXTCODECOPY}; no SLOAD on the bases or
+fees occurs on the swap path.
+
+\paragraph{Notation.}
+We index assets by $i \in \{0,\dots,n-1\}$ and write the pool's internal
+inventory as $\mathbf{q} = (q_0,\dots,q_{n-1})$, with the size metric
+$\Sm = \sum_i q_i$. The liquidity parameter is $\bofq = \kappa\,\Sm$ for a
+positive constant $\kappa$ fixed at deployment. Internal quantities are
+maintained in Q64.64 fixed-point (ABDKMath64x64); user-facing token amounts
+are integer base units (\texttt{uint256}) and are converted on the boundary
+using per-asset denominators $\beta_i$ (the \emph{bases}) set at deployment:
+$q_i = \mathrm{balance}_i / \beta_i$.
+
+\paragraph{Primary audience: liquidity providers.}
+Liquidity Party's first concern is the LP. The protocol is engineered so
+that every decision the LP cannot make on their own behalf --- rounding,
+approximation, cap-and-invert branch selection, fee/protocol-share split,
+emergency response --- is biased in favor of the LP. Section
+\ref{sec:lp-protections} consolidates the explicit LP-favor guarantees;
+sections \ref{sec:kernel}--\S\ref{sec:fees} reference them at each
+construction step. Takers and integrators are first-class users of the
+protocol surface but inherit the LP-favor invariants from the LP side; they
+should design assuming that any sub-ulp ambiguity in the rounding chain
+will resolve in the LP's favor and against their own position.
+
+\paragraph{Reading guide.}
+\S\ref{sec:lp-protections} catalogues LP protection mechanisms.
+\S\ref{sec:kernel}--\S\ref{sec:liquidity} specify the pricing kernel and
+liquidity operations as implemented. \S\ref{sec:fees}--\S\ref{sec:funding}
+describe fees, flash loans, and the four funding modes. \S\ref{sec:arch}
+covers the deployed contract surface, \S\ref{sec:admin} the admin powers and
+parameter fixity, and \S\ref{sec:deploy} the operator's deployment-time
+calibration choices. \S\ref{sec:security} documents the security review
+process that gates production launch. \S\ref{sec:risk} states the residual
+risk surface and operational mitigations, including the framing of
+slot drainage as expected and industry-normal LP behaviour.
+
+\section{LP Protection Mechanisms}
+\label{sec:lp-protections}
+
+This section consolidates the LP-favor guarantees that the rest of the
+document references. Each mechanism is enforced in source; this is an
+index, not a statement of intent.
+
+\subsection{Kernel-Level LP Safety}
+
+\paragraph{Midpoint-$b$ never overshoots LS-LMSR.}
+The production swap kernel
+(\texttt{LMSRStabilized.swapAmountsForExactInput}) is a two-pass midpoint
+approximation of the path-exact LS-LMSR mapping (\S\ref{sec:lp-safety}).
+The output it pays the swapper is bounded above by the output the
+path-exact LS-LMSR mapping would pay under the same inputs --- the swapper
+\emph{never} receives more than the path-exact reference, and the LP
+\emph{never} loses more than the path-exact reference. The bound is
+empirically verified on a 26-point grid covering $N \in \{2,5,10,50\}$,
+$\kappa \in \{0.005, \dots, 2.0\}$, $a/q \in \{10^{-4}, \dots, 10^{-1}\}$, plus
+a 3-point asymmetric grid, to $10^{-10}$ absolute tolerance.
+
+\paragraph{Capacity caps.}
+Output is hard-capped at available inventory $y \le q_j$ in the kernel
+(\S\ref{sec:midpoint}). The cap-and-invert branch derives the input that
+the LP actually absorbs, so the pool is never required to over-pay relative
+to its inventory.
+
+\paragraph{Single-asset chain LP-favor rounding.}
+The \texttt{swapMint} and \texttt{burnSwap} chains
+(\S\ref{sec:swapmint}--\S\ref{sec:burnswap}) carry a per-primitive rounding
+discipline. Where ABDK's default \texttt{mul}/\texttt{div}/\texttt{exp}/\texttt{ln}
+floor would shave a sub-ulp gift to the swapper, the kernel substitutes a
+ceiling helper (\texttt{\_ceilMul}, \texttt{\_ceilDiv}, \texttt{\_ceilExp},
+\texttt{\_ceilLn}); where the floor direction already serves LP-favor, the
+default is kept. Every individual decision is documented in-source by signed
+partial derivative against the LP-favoring direction. The
+\texttt{EXP\_LIMIT} branch in \texttt{swapMint} carries a 1-ulp cushion on
+top of the ceiling chain so that future ABDK-level rounding changes cannot
+re-open a leak.
+
+\subsection{Fee and Protocol-Share Rounding}
+
+\begin{itemize}
+  \item \textbf{Total fees round up} for the pool and against the taker.
+  \item \textbf{Protocol share rounds down} for the LP and against the
+        protocol developers.
+  \item \textbf{Outputs to users floor}; \textbf{inputs from users ceil}.
+  \item \textbf{Pre-funded dust} is credited to LP reserves rather than
+        refunded to the caller.
+\end{itemize}
+
+The protocol developers absorb the rounding loss on the protocol-share
+split; the LP keeps the residual. This is deliberate.
+
+\subsection{Admin-Side LP Protection}
+\label{sec:admin-risk}
+
+The admin (planner owner / pool owner) cannot reach LP reserves. The
+exhaustive CAN/CANNOT inventory is in \texttt{doc/security/admin-powers.md};
+the LP-relevant summary is:
+
+\begin{itemize}
+  \item Admin \textbf{cannot} mint LP out of band, burn user LP, change
+        $\kappa$, change fees on a live pool, pause user-side
+        \texttt{burn}, blacklist or freeze user balances, upgrade the pool
+        implementation, renounce ownership, or move funds out of the pool.
+  \item Admin \textbf{can} deploy new pools, set the protocol-fee recipient
+        on a live pool, and invoke the irreversible \texttt{kill()} switch
+        on a pool they own.
+\end{itemize}
+
+\paragraph{Compromised-key worst case.}
+A leaked admin key cannot reach LP reserves. Worst case: the attacker
+calls \texttt{kill()} (disabling new deposits, swaps, flash loans, single-
+asset withdrawals, and protocol-fee collection) and rotates
+\texttt{protocolFeeAddress} so any not-yet-collected protocol fees route to
+the attacker. \texttt{burn} remains operational on a killed pool, so LPs
+can always withdraw their pro-rata share of pool reserves. The core team
+retains the ability to \texttt{kill()} the system as a final defensive
+measure --- even if the admin key is compromised, the system can be put
+into the LP-can-only-exit state. \textbf{A leaked admin key presents
+little to no danger to LP reserves}; it is a denial-of-service surface and
+a partial protocol-fee redirect surface, not a fund-loss surface.
+
+The admin key is held on a hardware wallet (see
+\S\ref{sec:deployments}).
+
+\subsection{Burn Is Always Live}
+
+\texttt{burn} (the proportional-redemption path) is the only state-mutating
+entry point that \texttt{kill()} does \emph{not} disable. The
+proportional-redemption guarantee is preserved across every kill scenario,
+every admin-key scenario, and every operator-misconfiguration scenario by
+construction: there is no code path in the protocol that can disable
+\texttt{burn} for an LP holding the LP token.
+
+\section{Pricing Kernel}
+\label{sec:kernel}
+
+\subsection{LMSR Cost Function and the $\kappa\Sm$ Parameterization}
+
+The pool maintains the LMSR cost function in \emph{inventory convention}
+\begin{equation}
+  C(\mathbf{q}) \;=\; -\bofq\,\ln\!\left(\sum_{k=0}^{n-1} e^{-q_k/\bofq}\right),
+  \qquad \bofq = \kappa\,\Sm,
+\end{equation}
+where larger $q_i$ corresponds to a more abundant slot and therefore a
+\emph{cheaper} marginal price. The proportional parameterization
+$\bofq = \kappa\,\Sm$ yields three properties that drive the rest of the
+design:
+
+\begin{enumerate}
+  \item \textbf{Scale invariance.} A proportional rescaling
+        $\mathbf{q} \mapsto \lambda\mathbf{q}$ scales $b$ by $\lambda$ and
+        leaves every pairwise marginal price unchanged, so proportional
+        mint and burn are value-neutral.
+  \item \textbf{Bounded LP loss.} The classical LMSR worst-case-loss
+        $b\,\ln n$ becomes $\kappa\,\Sm\,\ln n$ at the current state; per
+        unit of size this is $\kappa\,\ln n$, fixed by the deployment
+        parameters.
+  \item \textbf{Liquidity sensitivity.} As the pool absorbs trades and
+        accrues fees, $\Sm$ grows and $b$ grows with it; depth deepens
+        automatically in proportion to TVL without governance intervention.
+\end{enumerate}
+
+The continuous LS-LMSR construction of Othman et al.\ (2013) admits a similar
+size-dependent $b$ but with a continuously evolving liquidity trajectory whose
+exact pricing requires integral evaluation. Our $\bofq = \kappa\,\Sm$ choice
+is a fixed proportionality whose effect we recover via a two-pass numerical
+midpoint (\S\ref{sec:midpoint}) rather than a path integral.
+
+\subsection{Marginal Prices}
+
+With $b$ treated quasi-statically, the gradient of $C$ recovers softmax-style
+prices and the instantaneous marginal exchange rate for swapping input
+$i \to$ output $j$ is
+\begin{equation}
+  P(i \to j \mid \mathbf{q}) \;=\; \exp\!\left(\frac{q_j - q_i}{\bofq}\right).
+\end{equation}
+A more abundant output slot (larger $q_j$) buys more output tokens per unit
+input. Per-pair denomination-adjusted prices are exposed via
+\texttt{PartyInfo.price(pool,\,i,\,j)} as a Q128.128 fixed-point quantity that
+accounts for the bases $\beta_i, \beta_j$.
+
+\subsection{Swap Mapping: Two-Pass Midpoint-$b$}
+\label{sec:midpoint}
+
+Let $i, j$ be the input and output asset indices and let $a$ be the
+fee-discounted internal input. The production swap kernel
+(\texttt{LMSRStabilized.swapAmountsForExactInput}) computes the output $y$ via
+a two-pass Heun-style midpoint of the Hanson exact-input formula:
+
+\begin{align}
+  &\textbf{Pass 0 (frozen pre-state $b$):} \nonumber\\
+  &\qquad b_0 = \kappa\,\Sm,
+  \quad r_0 = \exp\!\big((q_j - q_i)/b_0\big), \nonumber\\
+  &\qquad y_0 = b_0 \,\ln\!\Big(1 + r_0\,\big(1 - e^{-a/b_0}\big)\Big), \\
+  &\textbf{Pass 1 (midpoint $b$):} \nonumber\\
+  &\qquad b_{\mathrm{mid}} = \kappa\,\Big(\Sm + \tfrac{a - y_0}{2}\Big),
+  \quad r_{\mathrm{mid}} = \exp\!\big((q_j - q_i)/b_{\mathrm{mid}}\big),
+  \nonumber\\
+  &\qquad y = b_{\mathrm{mid}}\,\ln\!\Big(1 + r_{\mathrm{mid}}\,\big(1 - e^{-a/b_{\mathrm{mid}}}\big)\Big).
+\end{align}
+
+The first pass freezes $b$ at the pre-swap size, producing a Hanson output
+that under-estimates the true liquidity-sensitive LS-LMSR fill (because $b$
+grows as the trade absorbs input). The second pass re-evaluates the Hanson
+mapping at the size metric averaged across the swap, providing a Heun-style
+second-order correction. The implementation caps output at the available
+inventory $q_j$ when the inner term of $\ln$ degenerates (cap-and-invert
+branch).
+
+\paragraph{Why two passes.}
+A single-pass Hanson evaluation at frozen pre-state $b$ exhibits a round-trip
+asymmetry between \texttt{swapMint} and \texttt{burnSwap} on the order of
+$\sim 200$ bps in worst-case adversarial regimes. The midpoint-$b$ kernel
+reduces this asymmetry to $\le 2$~bps, which is covered by per-swap fees in
+any closed cycle.
+
+\subsection{LP-Safety Property of Midpoint-$b$}
+\label{sec:lp-safety}
+
+The path-exact reference is the liquidity-sensitive LMSR mapping under
+inventory convention: the $y^*$ that solves the cost-preservation equation
+\begin{equation}
+  \label{eq:lslmsr}
+  C\big(\mathbf{q} + a\,e_i - y^*\,e_j\big) \;=\; C(\mathbf{q}),
+  \qquad C(\mathbf{q}) = -\bofq\,\ln\!\Big(\textstyle\sum_k e^{-q_k/\bofq}\Big),
+  \quad \bofq = \kappa\,\Sm.
+\end{equation}
+With $b$ state-dependent, both $b$ and the inner exponents change as the
+state moves from $\mathbf{q}$ to $\mathbf{q} + a\,e_i - y\,e_j$, so $y^*$
+has no closed form.
+
+\paragraph{LP-safety theorem (empirically verified).}
+\emph{For every $(a, \mathbf{q}, \kappa, n)$ in the production envelope, the
+midpoint-$b$ output $y_{\mathrm{mid}}$ satisfies}
+\[
+  y_{\mathrm{mid}} \;\le\; y^*.
+\]
+\emph{Equivalently, the swapper receives at most what the path-exact
+LS-LMSR would pay, and the LP loses at most what the path-exact LS-LMSR
+would surrender.}
+
+\paragraph{Structural argument.}
+The starting point is the frozen-pre-state Hanson output $y_0$, which
+satisfies $y_0 < y^*$: with $b$ growing along the deposit path
+($\Sm$ rises from $\Sm$ to $\Sm + (a - y^*)$), the cost surface flattens
+and the cost-preserving $y$ at the path-exact $b$-trajectory exceeds the
+$y$ at the frozen $b$. The midpoint correction replaces $b_0 = \kappa\,\Sm$
+with
+\[
+  b_{\mathrm{mid}} \;=\; \kappa\,\Big(\Sm + \tfrac{a - y_0}{2}\Big),
+\]
+which is the size metric at the midpoint of the \emph{frozen-$b$} swap
+trajectory. Because $y_0 < y^*$ implies
+\[
+  \Sm + \tfrac{a - y_0}{2} \;<\; \Sm + \tfrac{a - y^*}{2},
+\]
+$b_{\mathrm{mid}}$ is strictly below the size metric at the midpoint of the
+\emph{true} swap trajectory. The Hanson exact-in mapping is increasing in
+$b$ on the relevant regime, so the recomputed $y_{\mathrm{mid}}$ is less
+than the path-exact midpoint-rule output, which itself is bounded above by
+$y^*$ (the true cost-preserving fill). Both bounds operate in the
+LP-favouring direction.
+
+\paragraph{Empirical verification.}
+The property is verified by exhaustive grid testing in
+\texttt{test/MidpointBSwapGas.t.sol}
+(\texttt{test\_midpoint\_NeverOvershoots\_LSLMSR},
+\texttt{test\_midpoint\_NeverOvershoots\_AsymmetricPool}). The grid covers
+$N \in \{2, 5, 10, 50\}$, $\kappa \in \{0.005, 0.05, 0.2, 0.5, 1.0, 2.0\}$, and
+$a/q \in \{10^{-4}, 10^{-3}, 10^{-2}, 10^{-1}\}$, on both symmetric and
+asymmetric starting states. Tolerance: $10^{-10}$ absolute, well below
+1~wei in Q64.64. \textbf{No grid point overshoots.} The bound is therefore
+established by a combination of the structural argument above and exhaustive
+testing across the production envelope, rather than by a closed-form proof
+over the unbounded $(a, \mathbf{q}, \kappa, n)$ space.
+
+\paragraph{Consequence.}
+A \texttt{swapMint}/\texttt{burnSwap} closed cycle pays at most the
+path-exact LS-LMSR round-trip cost plus the residual midpoint-$b$
+approximation drift ($\le 2$ bps, see \texttt{security/drainage-guidelines.md}
+\S 7). Per-swap fees uniformly exceed this drift at any deployment-recommended
+fee level, so closed cycles are strictly loss-making for the attacker and
+strictly profitable for the LP.
+
+\paragraph{Capacity caps.}
+For output $y$ that would exceed available $q_j$, the kernel returns
+$y = q_j$ at the cap-and-invert boundary. The inverse mapping
+(\texttt{amountInForExactOutput}) returns the input required for a target
+output, using
+\begin{equation}
+  a(y) \;=\; b \,\ln\!\left(\frac{r_0}{r_0 + 1 - e^{y/b}}\right),
+\end{equation}
+which is the exact closed-form inverse of the Hanson exact-in mapping (used
+internally, not as a public exact-out swap entry point).
+
+\paragraph{Numerical stability.}
+The kernel computes ratios like $r_0 = \exp((q_j - q_i)/b)$ directly rather
+than dividing exponentials, guards every \texttt{exp} and \texttt{ln} call to
+bounded domains (\texttt{EXP\_LIMIT = 32.0}), and checks the positivity of
+the inner $\ln$ argument before evaluation. Domain violations revert; outputs
+are clamped to capacity rather than extrapolated. The cost function evaluates
+log-sum-exp with one-pass dynamic recentering for stability under dispersed
+$q_k$.
+
+\subsection{Slippage Protection}
+
+Every user-facing swap accepts a \texttt{minAmountOut} (or, on
+\texttt{swapMint}, a \texttt{maxAmountIn}). If the computed output is below
+\texttt{minAmountOut}, the call reverts. This is denomination-aware slippage
+protection requiring no price-unit conversions. Off-chain callers that prefer
+a price-based bound may use the bisection helper
+\texttt{PartyInfo.swapAmountsForExactPrice} to convert a target post-swap
+forward price into a \texttt{(maxAmountIn, minAmountOut, fee)} triple suitable
+for direct submission to \texttt{swap()}.
+
+\section{Liquidity Operations}
+\label{sec:liquidity}
+
+The pool issues an ERC-20 LP share token. The total LP supply $L$ tracks
+$\Sm$ proportionally: $L^{(0)} = 10^{18}$ shares are minted at
+\texttt{initialMint} regardless of pool size, and subsequent operations
+preserve the ratio $L / \Sm$ on every proportional change.
+
+\subsection{Proportional Mint and Burn}
+
+\paragraph{\texttt{mint(lpTokenAmount)}.} The caller specifies a target LP
+amount $\Delta L$. The pool computes the required deposit amounts as the
+proportional fraction $\Delta L / L$ of each current reserve, pulls those
+amounts via the chosen funding mode (\S\ref{sec:funding}), and mints exactly
+$\Delta L$ shares to \texttt{receiver}. Any over-delivery from a funding
+callback is absorbed into reserves (donated to LPs) per the rounding policy
+(\S\ref{sec:rounding}). LP shares minted are derived from the post-deposit
+size delta divided by the pre-deposit cached size to prevent fee skim during
+the first mint after fee accrual.
+
+\paragraph{\texttt{burn(lpAmount)}.} The caller burns $\Delta L$ shares and
+receives the proportional fraction $\Delta L / L$ of each reserve token.
+\texttt{burn} is the \emph{only} state-mutating entry point that is \emph{not}
+disabled by \texttt{kill()} (see \S\ref{sec:admin}); LPs can always exit pro
+rata.
+
+Proportional mint and burn are value-neutral in the fee-free kernel: every
+pairwise marginal price is invariant under $\mathbf{q} \mapsto \lambda\mathbf{q}$.
+
+\subsection{Single-Asset Mint: \texttt{swapMint}}
+\label{sec:swapmint}
+
+\texttt{swapMint} is exact-LP-out: the caller specifies $\Delta L$ shares to
+receive and a \texttt{maxAmountIn} cap on the deposit of a single input asset
+$i$. Internally, the operation is equivalent to executing the externally
+observable sequence ``swap $i \to j$ for every $j \ne i$, then proportional
+mint with the resulting basket.'' The fee-free kernel computes the required
+input in one forward pass against a memory-only local state $\mathbf{q}_{\mathrm{local}}$:
+
+\begin{enumerate}
+  \item Compute $\gamma = \Delta L / L$ and $\beta = \gamma/(1+\gamma) \in (0,1)$.
+  \item Initialize $\mathbf{q}_{\mathrm{local}} = \mathbf{q}$.
+  \item For each $j \ne i$ in fixed index order: recompute
+        $b_{\mathrm{local}} = \kappa\,\Sm[\mathbf{q}_{\mathrm{local}}]$,
+        $r_{0,j} = \exp\!\big((q_{\mathrm{local}}^j - q_{\mathrm{local}}^i)/b_{\mathrm{local}}\big)$,
+        and solve the Hanson exact-out inverse for the cost of acquiring
+        $\beta\,q_j$ of asset $j$:
+        \[
+          x_j \;=\; b_{\mathrm{local}}\,\ln\!\left(\frac{r_{0,j}}{r_{0,j} + 1 - e^{\beta q_j / b_{\mathrm{local}}}}\right).
+        \]
+        Update $\mathbf{q}_{\mathrm{local}}$: $q_{\mathrm{local}}^i \mathrel{+}{=} x_j$,
+        $q_{\mathrm{local}}^j \mathrel{-}{=} \beta\,q_j$.
+  \item Return the total deposit
+        $\displaystyle a \;=\; \frac{\beta\,q_i + \sum_{j \ne i} x_j}{1 - \beta}.$
+\end{enumerate}
+
+The chain mutates a memory copy only; the pool's storage is updated at the
+end with the new reserves and exactly $\Delta L$ LP shares are minted. Each
+per-leg call re-evaluates $b_{\mathrm{local}}$ at the current chain state, so
+the simulation matches the post-state that any external actor would produce
+by performing the same sequence of swaps. As a consequence, a
+\texttt{swapMint}-\texttt{burnSwap} round trip incurs only composed swap
+slippage rather than the frozen-$b$ drift produced by a single-shot kernel
+evaluation.
+
+\paragraph{Rounding.}
+The exact-out cost $x_j$ uses ABDK floor primitives that round in the
+trader's favor under the natural \texttt{mul}/\texttt{div}/\texttt{exp}/\texttt{ln}
+semantics. To restore the LP-favoring invariant, the kernel applies explicit
+ceiling helpers (\texttt{\_ceilMul}, \texttt{\_ceilDiv}, \texttt{\_ceilExp},
+\texttt{\_ceilLn}) at every step whose floor direction would shave a sub-ulp
+gift to the swapper, and adds a 1-ulp cushion in the asymptotic
+$\mathrm{EXP\_LIMIT}$ branch. Every individual rounding decision is documented
+in-source by signed partial derivative against the LP-favoring direction.
+
+\subsection{Single-Asset Redeem: \texttt{burnSwap}}
+\label{sec:burnswap}
+
+\texttt{burnSwap} is the inverse of \texttt{swapMint}: the caller burns
+$\Delta L$ LP shares and receives a single output asset $j$. The fee-free
+kernel computes the payout by simulating a proportional withdraw followed by
+swaps of every withdrawn $a_k$ back into asset $j$ against the already-burnt
+local state:
+
+\begin{enumerate}
+  \item Compute $\alpha = \Delta L / L$.
+  \item Initialize $\mathbf{q}_{\mathrm{local}} = (1 - \alpha)\,\mathbf{q}$ and
+        start the payout with the proportional share $Y_j = \alpha\,q_j$.
+  \item For each $k \ne j$: set $a_k = \alpha\,q_k$ (the withdrawn portion of
+        asset $k$). Recompute $b_{\mathrm{local}}$ and
+        $r_{0,k} = \exp\!\big((q_{\mathrm{local}}^j - q_{\mathrm{local}}^k)/b_{\mathrm{local}}\big)$
+        at the current state; compute the Hanson exact-in payout
+        \[
+          y_{k\to j} \;=\; b_{\mathrm{local}}\,\ln\!\Big(1 + r_{0,k}\,\big(1 - e^{-a_k/b_{\mathrm{local}}}\big)\Big).
+        \]
+        Accumulate $Y_j \mathrel{+}{=} y_{k\to j}$ and update
+        $\mathbf{q}_{\mathrm{local}}$. If $y_{k\to j}$ exceeds available
+        $q_{\mathrm{local}}^j$, cap the payout to $q_{\mathrm{local}}^j$ and
+        derive the actually-consumed input via the exact-out inverse.
+  \item Per-asset numerical degeneracy (e.g.\ $b_{\mathrm{local}} \le 0$,
+        non-positive inner $\ln$ argument) is treated as zero contribution from
+        that asset rather than aborting the redeem.
+\end{enumerate}
+
+The cap-hit branch uses ceiling rounding for the simulated input absorbed by
+the pool (so subsequent legs see a larger $q_{\mathrm{local}}^k$ and produce
+strictly smaller payouts), and shaves one ulp from the cap payout, preserving
+LP favor without exposing the burner to a denial-of-service via per-leg
+failure.
+
+\paragraph{Kill-resistance asymmetry.}
+\texttt{burnSwap} is disabled by \texttt{kill()}; \texttt{burn} is not. A
+killed pool therefore permits proportional redemption but not single-asset
+redemption.
+
+\section{Fee Structure}
+\label{sec:fees}
+
+\subsection{Per-Asset Fees}
+
+Each asset $k$ has an immutable fee rate $f_k$ set at deployment, expressed
+in parts-per-million. The deployer enforces $f_k < 10{,}000$~ppm
+($< 1\%$). For an asset-to-asset swap $i \to j$, the effective pair fee is
+the additive composition
+\begin{equation}
+  f_{\mathrm{eff}}(i, j) \;=\; f_i + f_j,
+\end{equation}
+applied to the user's submitted input before the fee-free kernel:
+\[
+  a_{\mathrm{eff}} = a_{\mathrm{user}}\,(1 - f_{\mathrm{eff}}).
+\]
+The additive form is preferred over the exact multiplicative
+$1 - (1 - f_i)(1 - f_j)$ because the cross-term at the deployment cap
+($f_i, f_j < 10^{-2}$) is below $10^{-4}$ of the pair fee, and the simpler
+formula is cheaper to evaluate and easier for users to reason about.
+
+The collected fee is retained in the input token and split into a protocol
+share and an LP share (see below). The LP share remains in pool reserves,
+raising $\Sm$ and thereby the LP-share-denominated value.
+
+\subsection{Single-Asset Fees on \texttt{swapMint} and \texttt{burnSwap}}
+
+Single-asset operations interact with exactly one external token, so only
+that token's fee applies:
+
+\begin{itemize}
+  \item \texttt{swapMint}: charge $f_i$ on the deposited token before invoking
+        the fee-free kernel. The protocol share is split off; the remainder
+        increases pool reserves.
+  \item \texttt{burnSwap}: charge $f_j$ on the gross payout after the fee-free
+        kernel computes it. The protocol share is split off; the remainder
+        stays in pool reserves.
+\end{itemize}
+
+There is no separate LP-token-side fee. This keeps LP accounting symmetric
+with the asset-to-asset path and avoids double-charging when LP shares are the
+counterparty.
+
+\subsection{Protocol Fees}
+
+A protocol-fee share $\phi$ (ppm) is taken from every collected fee. The
+deployer enforces $\phi < 400{,}000$~ppm ($< 40\%$). Accrued protocol fees
+are tracked in a per-token ledger
+(\texttt{\_protocolFeesOwed}) that is excluded from the pool's
+liquidity-bearing balance (\texttt{\_cachedUintBalances}); pending protocol
+fees do not participate in pricing or earn further fees. The
+\texttt{collectProtocolFees()} entry point sweeps the ledger to the
+configured \texttt{protocolFeeAddress} and zeroes it; the recipient is
+read at call time, so a recipient rotation applied between accrual and
+collection retroactively redirects pending fees (Uniswap V3-style semantics;
+operators that need atomic handoff must collect before rotating).
+
+\subsection{Flash Loans}
+
+The pool implements ERC-3156. Any caller may borrow any pool token within a
+single transaction, repaying principal plus the flash-loan fee
+$f_{\mathrm{flash}}$ (ppm, immutable, capped at $< 10{,}000$~ppm) before the
+borrower callback returns. The protocol share $\phi$ of the flash fee is
+accumulated to \texttt{\_protocolFeesOwed}; the remainder remains in
+reserves and accrues to LPs analogously to swap fees. Flash loans are
+disabled by \texttt{kill()}.
+
+\subsection{Rounding Policy}
+\label{sec:rounding}
+
+All rounding decisions are biased to protect existing LP value:
+
+\begin{itemize}
+  \item Total fees are rounded \emph{up} (taker pays the extra ulp; LP keeps
+        it).
+  \item The protocol share is rounded \emph{down} (LP keeps the residual; the
+        protocol developers absorb the ulp).
+  \item Pool outputs to users are floored; pool inputs from users are ceiled.
+  \item Pre-funded amounts above the exact required amount are credited to
+        reserves rather than refunded (LP gift).
+  \item Q64.64 ceil helpers (\texttt{\_ceilMul}, \texttt{\_ceilDiv},
+        \texttt{\_ceilExp}, \texttt{\_ceilLn}) are applied per-primitive in
+        \texttt{swapMint}/\texttt{burnSwap} to restore LP favor where ABDK's
+        default floor would otherwise leak a sub-ulp gift to the swapper.
+\end{itemize}
+
+\section{Funding Modes}
+\label{sec:funding}
+
+User-facing entry points (\texttt{swap}, \texttt{mint}, \texttt{swapMint},
+\texttt{burnSwap}) accept any of four token-delivery modes via a
+\texttt{fundingSelector} parameter. The kernel mathematics are identical
+across modes.
+
+\begin{description}
+  \item[\textsf{APPROVAL}] Standard ERC-20 \texttt{transferFrom} from the
+        caller. Caller must hold the input balance and have approved the pool.
+        The mode requires \texttt{msg.sender == payer} to prevent
+        third-party-allowance abuse.
+  \item[\textsf{PREFUNDING}] Caller deposits tokens to the pool address before
+        invoking the entry point; the pool measures the balance delta against
+        \texttt{\_cachedUintBalances + \_protocolFeesOwed}. Excess above the
+        required amount is gifted to LPs. Native ETH is auto-wrapped via the
+        configured wrapper when the pool's input token equals the wrapper
+        address and the pool's ETH balance covers the amount.
+  \item[\textsf{CALLBACK}] Aggregators and routers implement a callback
+        interface; the pool calls
+        \texttt{payer.\textit{fundingSelector}(nonce, token, amount, cbData)}
+        and measures the resulting balance delta to determine the funded
+        amount.
+  \item[\textsf{PERMIT2}] Uniswap Permit2 signature-based transfer with
+        witness data binding the operation's parameters to the signature.
+        Witness types are defined per entry point in
+        \texttt{PartyPoolPermit2Witness} for \texttt{swap}, \texttt{mint}, and
+        \texttt{swapMint}; \texttt{burnSwap} does not require an input
+        transfer.
+\end{description}
+
+The flash-loan entry point does not use a funding mode: principal is lent
+out and repayment is pulled via \texttt{transferFrom} after the borrower
+callback returns.
+
+\paragraph{Native ETH.} The pool accepts native ETH on the entry points
+declared \texttt{payable}, but only the configured wrapper (a WETH-style
+contract) may push raw ETH back into the pool via \texttt{receive()}. Any
+other direct ETH transfer reverts so stray sends cannot be stranded. Multi-
+asset mint loops carry an explicit per-call ETH budget so the wrap branch
+cannot over-claim against a constant \texttt{msg.value}.
+
+\section{Contract Architecture}
+\label{sec:arch}
+
+\subsection{PartyPool: Proxy and Storage}
+
+\texttt{PartyPool} is a non-upgradeable \texttt{DELEGATECALL} proxy. Two
+implementation libraries (\texttt{PartyPoolMintImpl},
+\texttt{PartyPoolExtraImpl}) host the body of \texttt{mint}, \texttt{burn},
+\texttt{swapMint}, \texttt{burnSwap}, \texttt{flashLoan},
+\texttt{collectProtocolFees}, and the constructor body. The pool's own
+runtime is a thin facade so its deployed bytecode plus its creation-code
+embed in \texttt{PartyPoolInitCode} both fit under EIP-170's 24~KB
+contract-size cap. Implementation addresses are immutable; there is no
+upgrade path.
+
+Storage layout is mirrored by \texttt{PartyPoolStorage.PoolState} for use
+under \texttt{DELEGATECALL}. Per-token \texttt{bases} and \texttt{fees} are
+not held in storage --- they live in an SSTORE2 ``BFStore'' data contract
+deployed at \texttt{init} time, whose address is captured in the
+\texttt{IMMUTABLE\_BFSTORE} pool immutable. Hot paths read it via
+\texttt{EXTCODECOPY}, avoiding bounds-check SLOADs on the array length.
+
+The LMSR state \texttt{(\_lmsr.kappa, \_lmsr.qInternal)} is a cache: the
+pool re-derives the post-swap, post-mint, and post-burn \texttt{qInternal}
+from the cached uint balances and the immutable bases on every mutation,
+keeping the kernel state synchronized with physical reserves across all
+state-changing paths.
+
+\subsection{PartyPlanner: Factory and Registry}
+
+\texttt{PartyPlanner.newPool} (\texttt{onlyOwner}) deploys a new
+\texttt{PartyPool} via \texttt{CREATE2} with operator-supplied parameters
+(see \S\ref{sec:admin}). The planner indexes deployed pools and tokens for
+off-chain discovery (\texttt{getAllPools}, \texttt{getPoolsByToken},
+\texttt{tokenIndex}). A delta-equality check on the initial deposit
+(\texttt{balanceAfter $-$ balanceBefore == initialDeposits[i]}) at deploy
+time rejects fee-on-transfer and rebasing tokens that fail to deliver the
+exact deposit amount. Pre-existing balances at the CREATE2 address are
+absorbed into reserves and gifted to the first depositor; this is intentional
+and closes a deployment-griefing DoS that total-equality would have re-opened
+(see \texttt{doc/security/threat-model.md} \S J.6).
+
+\subsection{PartyInfo: View Helpers}
+
+\texttt{PartyInfo} is a singleton view contract that accepts a target pool
+address. It hosts pricing utilities (\texttt{price}, \texttt{poolPrice},
+\texttt{swapAmountsForExactPrice}, quote helpers for the multi-step mint/burn
+chains), the BFStore decoders (\texttt{denominators}, \texttt{fees}), and a
+\texttt{working(pool)} health check. Quote helpers run the same simulation
+as the on-chain entry points; their output is suitable for direct submission
+to \texttt{swap}/\texttt{swapMint}/\texttt{burnSwap}.
+
+\subsection{PartyConcierge: Router}
+
+\texttt{PartyConcierge} is the user-facing router. It accepts token addresses
+rather than indices so wallets can render trades with human-readable token
+names (EIP-7730 clear-signing compatibility). A single ERC-20 approval to
+the Concierge covers every pool on the same chain. Funding is callback-based:
+the Concierge stores call context in EIP-1153 transient storage
+(\texttt{cbUser}, \texttt{cbPool}, \texttt{cbMode}, \texttt{cbEthBudget}),
+validates \texttt{msg.sender == cbPool} on every callback, and refunds
+residual ETH via \texttt{sweepEth}. Adds approximately 10k gas to a typical
+swap.
+
+The Concierge supports three input paths: standard approval pull,
+Permit2 signature-based pull (no Concierge approval required, only the
+universal Permit2 approval), and native-ETH wrap from \texttt{msg.value}.
+
+\section{Admin Powers and Parameter Fixity}
+\label{sec:admin}
+
+The deployment parameter tuple
+\[
+  (\kappa,\; \mathbf{f} = (f_0, \dots, f_{n-1}),\; \phi,\; f_{\mathrm{flash}},\; \boldsymbol{\beta} = (\beta_0, \dots, \beta_{n-1}))
+\]
+is set at \texttt{newPool} and is immutable for the lifetime of the pool.
+The deployer enforces hard caps at construction time:
+
+\begin{table}[h]
+\centering
+\caption{Hard caps enforced at \texttt{PartyPlanner.newPool}}
+\label{tab:caps}
+\begin{tabular}{ll}
+\toprule
+Parameter & Bound \\
+\midrule
+Per-asset swap fee $f_i$       & $< 10{,}000$ ppm ($< 1\%$) \\
+Flash-loan fee $f_{\mathrm{flash}}$  & $< 10{,}000$ ppm ($< 1\%$) \\
+Protocol fee share $\phi$      & $< 400{,}000$ ppm ($< 40\%$) \\
+Asset count $n$                & $2 \le n \le 383$ \\
+$\kappa$                       & $> 0$ (Q64.64) \\
+Per-token base $\beta_i$       & $> 0$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Mutable State on a Live Pool}
+
+The only mutable state on a deployed pool, post-\texttt{newPool}, is:
+
+\begin{itemize}
+  \item \texttt{protocolFeeAddress} --- recipient of accrued protocol fees,
+        settable by the pool owner via \texttt{setProtocolFeeAddress}. Zero
+        address is rejected when $\phi > 0$. The recipient is read at
+        \texttt{collectProtocolFees} call time (see \S\ref{sec:fees}).
+  \item Two-step ownership handoff via the \texttt{Ownable2Step} surface.
+  \item The irreversible \texttt{kill()} flag.
+\end{itemize}
+
+\subsection{Emergency Kill Switch}
+
+The pool owner may call \texttt{kill()}, after which all state-mutating
+entry points except \texttt{burn} revert: \texttt{swap}, \texttt{mint},
+\texttt{swapMint}, \texttt{burnSwap}, \texttt{flashLoan},
+\texttt{collectProtocolFees}, and \texttt{initialMint}. The action is
+one-way; there is no \texttt{unkill}. The proportional-redemption guarantee
+of \texttt{burn} is preserved by design so LPs can always withdraw their
+pro-rata share. \texttt{kill()} is intended for incident response if a
+critical vulnerability is discovered post-deployment; it is disjoint from
+the immutable parameter set.
+
+\subsection{What the Operator Cannot Do}
+
+The operator (planner owner and pool owner) explicitly \emph{cannot}:
+mint LP out of band, burn user LP, change $\kappa$ or any fee parameter on
+a live pool, pause user-side burns, blacklist or seize user balances, upgrade
+the pool implementation, renounce ownership, or move funds out of the pool
+directly. The full inventory of admin powers (CAN and CANNOT) is documented
+in \texttt{doc/security/admin-powers.md}.
+
+\section{Deployment Guidelines}
+\label{sec:deploy}
+
+\subsection{Operator Workflow}
+
+The recommended end-to-end deployment workflow is:
+
+\begin{enumerate}
+  \item \textbf{Token vetting.} Run \texttt{bin/validate-token <addr>} against
+        every candidate token (see \texttt{doc/security/trusted-deployer-policy.md}
+        for the validator policy). Resolve every \texttt{WARN} off-chain;
+        \texttt{FAIL} blocks listing. Cross-check with
+        \texttt{slither-check-erc <addr> ERC20 --erc-conformance}. Record
+        verifications in a listing record.
+  \item \textbf{Parameter selection.} Choose $\kappa$ (\S\ref{sec:kappa}),
+        per-asset fees, flash fee, and bases (\S\ref{sec:bases}).
+  \item \textbf{Initial liquidity.} Fund the deployer with
+        \texttt{initialDeposits[i]} for each token; approve the planner.
+  \item \textbf{Deploy.} Call \texttt{PartyPlanner.newPool(...)}. The planner
+        deploys the pool via \texttt{CREATE2}, pulls initial liquidity from
+        the operator-specified \texttt{payer}, and invokes
+        \texttt{initialMint} on the new pool, minting $10^{18}$ LP shares to
+        \texttt{receiver}.
+  \item \textbf{Verify.} Confirm the pool address, \texttt{LMSR()} state, and
+        \texttt{balances()} match expectations. Subscribe to the
+        \texttt{PartyStarted} event for the indexer.
+\end{enumerate}
+
+\subsection{Choosing $\kappa$}
+\label{sec:kappa}
+
+$\kappa$ controls the trade-off between price stability (higher $\kappa$ =
+more forgiving for large trades) and depth efficiency (lower $\kappa$ = more
+sensitive, drains faster on adverse moves). The maximum external single-asset
+price move the pool can survive before that slot drains is
+\begin{equation}
+  R_{\mathrm{p,max}} \;=\; \exp\!\left(\frac{1}{\kappa\,(n-1)}\right).
+\end{equation}
+Production-recommended ranges, by pool type:
+
+\begin{table}[h]
+\centering
+\caption{Suggested $\kappa$ ranges by pool type (see \texttt{security/drainage-guidelines.md})}
+\label{tab:kappa}
+\begin{tabular}{lll}
+\toprule
+Pool type & $\kappa$ & Rationale \\
+\midrule
+Tight stablecoin peg              & $0.5 - 2.0$ & Absorbs only small moves; toxic flow stays out \\
+Correlated assets (stETH/ETH)     & $0.2 - 0.5$ & Tolerates modest decoupling \\
+Volatile blue-chip pairs (ETH/BTC)& $0.1 - 0.3$ & Designed for 2--20$\times$ moves \\
+Long-tail / speculative           & $0.01 - 0.1$ & Survives larger price discovery \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For multi-asset pools the same $\kappa\,\Sm$ liquidity budget is shared
+across $n$ slots, so single-slot divergence drains faster as $n$ grows. The
+canonical drain-threshold table is in
+\texttt{security/drainage-guidelines.md} \S2.
+
+\subsection{Choosing Bases $\beta_i$}
+\label{sec:bases}
+
+Each per-token base $\beta_i$ converts raw token units to internal Q64.64
+units: $q_i = \mathrm{balance}_i / \beta_i$. Set $\beta_i$ such that the
+initial $q_i$ values lie within $\sim 10\times$ of each other across slots.
+This:
+
+\begin{itemize}
+  \item Maximizes precision headroom across natural drift.
+  \item Aligns the initial spot price near $1{:}1$ in internal units; the
+        deployer is responsible for any external-USD reference rate
+        encoded in the initial deposit ratios.
+  \item Sits the pool well inside the kernel's $\mathrm{EXP\_LIMIT}$ envelope.
+\end{itemize}
+
+Bases are immutable; revising them requires deploying a new pool. The bases
+are sourced from \texttt{initialDeposits} passed to \texttt{newPool}.
+
+\subsection{Fee Calibration}
+\label{sec:fee-calibration}
+
+Per-asset fees use a \textbf{$C \cdot \sigma$ method}: the fee rate for asset
+$i$ is set proportional to a volatility estimate $\sigma_i$ for that asset,
+scaled by a single protocol-wide constant $C$. USDC anchors the table at
+$1.0$ bps; every other listed asset's fee is set so that $f_i / \sigma_i$
+matches USDC's $f_{\mathrm{USDC}} / \sigma_{\mathrm{USDC}}$, then scaled by
+$C$.
+
+\paragraph{Bridge surcharge.}
+Wrapped-bridged assets (e.g.\ \texttt{wSOL}) carry an additional
+heuristically-applied fee component on top of the $C\sigma$ baseline. The
+surcharge reflects the bridge-trust risk premium: an LP holding a wrapped
+asset bears the bridge's solvency and operational risk in addition to the
+underlying asset's market risk, and the fee schedule compensates them for
+that.
+
+\paragraph{Step 1: calibrate $C$ to undercut competing pools.}
+$C$ is set as a first step, before any $\kappa$ tuning, by reference to the
+fee levels charged by competing AMMs on the same or comparable pairs.
+$C$ is raised to the largest value that still ``just undercuts'' the
+prevailing market rate on the relevant pairs --- high enough to extract
+meaningful fee revenue from organic flow, low enough that fee-sensitive
+takers prefer Liquidity Party to the competing venue. Once chosen, $C$ is
+fixed for the rest of the calibration.
+
+\paragraph{Step 2: optimize $\kappa$ at fixed $C$.}
+With $C$ fixed, $\kappa$ is tuned against a 15-month historical
+simulation. The simulation operates two flow streams against a candidate
+pool:
+
+\begin{enumerate}
+  \item A \emph{Binance-connected arbitrageur} able to take infinite
+        liquidity at the Binance inside quote plus 2 bps. This is an
+        upper bound on real arbitrage activity --- the inside is thin in
+        practice, so a real arb cannot take infinite size at the inside
+        plus 2 bps. The simulation therefore over-estimates arbitrage
+        pressure on the pool, biasing $\kappa$ toward conservative
+        (LP-favoring) values.
+  \item \emph{Organic flow} derived from on-chain trade data, specifically
+        CoW Swap auction participant flow over the same 15-month window.
+        This is real, fee-sensitive user demand.
+\end{enumerate}
+
+The objective is the LP's terminal net return: fees collected minus
+LVR-style adverse-selection cost minus realized IL on slot drift, measured
+at the simulated horizon. $\kappa$ is chosen to maximize that net at the
+fixed $C$.
+
+The procedure --- $C$ from market-rate undercut, then $\kappa$ from
+LP-net-return optimization at fixed $C$ --- decouples the two parameters:
+$C$ is set by competitive positioning and $\kappa$ is set by historical
+LP-economics simulation. The same $C\cdot\sigma$ schedule and the same
+chosen $\kappa$ are used across all initial pool deployments; future
+pools recalibrate $C$ if the competitive landscape on the new pair
+differs materially, and re-run the $\kappa$ optimization if the new flow
+profile is not covered by the existing simulation envelope.
+
+\subsection{Native-Asset Wrapping}
+
+If the pool will accept native ETH (or chain-native equivalent), one of the
+pool's tokens must be the canonical wrapper (\texttt{WETH9} on mainnet, the
+equivalent on each L2). The wrapper address is passed via the planner
+constructor and is the only address authorized to push raw ETH into the pool
+through \texttt{receive()}.
+
+\section{Security Review Process}
+\label{sec:security}
+
+\subsection{Layered Defence}
+
+The protocol applies a defence-in-depth posture (\texttt{doc/security/threat-model.md} \S1):
+
+\begin{itemize}
+  \item \textbf{Permissioned deploy} as the primary defence against malicious
+        tokens. \texttt{PartyPlanner.newPool} is \texttt{onlyOwner},
+        indefinitely. The operator is the trust anchor for token vetting.
+  \item \textbf{Runtime guards.} \texttt{nonReentrant} on every state-mutating
+        entry point, \texttt{killable} on every entry point except
+        \texttt{burn}, payer-gates on the \texttt{APPROVAL} and
+        \texttt{PREFUNDING} funding paths, deploy-time delta-equality on the
+        initial-deposit transfer, EIP-712 witness binding on every Permit2
+        path.
+  \item \textbf{Off-chain validation.} \texttt{bin/validate-token} +
+        \texttt{slither-check-erc} are mandatory pre-listing. The validator
+        emits \texttt{PASS}/\texttt{WARN}/\texttt{FAIL}; \texttt{WARN}
+        requires off-chain verification and a recorded listing-record entry,
+        \texttt{FAIL} blocks the listing entirely.
+  \item \textbf{Monitoring + kill switch.} Off-chain drift monitoring with
+        documented yellow/red thresholds; \texttt{kill()} as the last-resort
+        lever.
+\end{itemize}
+
+There is no on-chain price oracle dependency; pricing is intrinsic to the
+LMSR kernel.
+
+\subsection{Internal Review Artefacts}
+
+The repository carries the following internal review artefacts that gate
+launch (see \texttt{doc/security/}):
+
+\begin{itemize}
+  \item \texttt{threat-model.md} --- threat model, actors, fund-bearing
+        assets, attack vectors, invariants. v2 pre-deploy.
+  \item \texttt{checklist.md} --- the security review checklist (14 sections,
+        84 rows). Every row resolves to either ``closed in source'', ``closed
+        by docs'', or ``open item''.
+  \item \texttt{asset-authority-matrix.md} --- (actor $\times$ asset $\times$
+        function) $\to$ gate $@$ file:line, the per-cell authorization matrix.
+  \item \texttt{admin-powers.md} --- CAN/CANNOT inventory of every
+        \texttt{onlyOwner} surface, with trapped-funds analysis.
+  \item \texttt{trusted-deployer-policy.md} --- operator obligations, the
+        token-class denylist (fee-on-transfer, rebasing, ERC-777-style hook
+        tokens, multi-address proxy, mutable governance), the listing
+        checklist.
+  \item \texttt{economics-audit.md} --- the economics-side review of the
+        fee structure, single-asset round trips, and LP-favor invariants.
+  \item \texttt{storage-layout-audit.md} --- audit of the C3-linearized
+        storage layout used under \texttt{DELEGATECALL}.
+  \item \texttt{unchecked-blocks-audit.md} --- justification for every
+        \texttt{unchecked} block in \texttt{src/}.
+  \item \texttt{differential-review.md} --- differential review of the
+        midpoint-$b$ kernel change against the previous frozen-$b$ Hanson.
+  \item \texttt{tooling-runbook.md} --- Slither, Mythril, and forge-test
+        invocation reference.
+  \item \texttt{user-allowance-guidance.md} --- guidance for integrators on
+        the Concierge approval surface and Permit2 usage.
+\end{itemize}
+
+\subsection{Tooling}
+
+\begin{itemize}
+  \item \textbf{Foundry / forge-test.} The in-tree test suite carries the
+        cost-preservation, midpoint-no-overshoot, imbalance-precision-sweep,
+        and (actor $\times$ asset) gating tests that close the checklist.
+        Coverage runs under \texttt{bin/coverage} with
+        \texttt{forge coverage --ir-minimum --no-match-contract "ContractSize|GasTest"}.
+  \item \textbf{Slither.} Static analysis with the project's
+        \texttt{slither.config.json}. False-positive suppressions are
+        committed alongside the code they suppress and are reviewed in the
+        checklist.
+  \item \textbf{Token validator.} \texttt{bin/validate-token} probes a
+        candidate token across the property axes that the protocol cannot
+        defend against at runtime (fee-on-transfer, rebasing, hook
+        callbacks, multi-address proxy, mutable governance). See
+        \texttt{doc/security/trusted-deployer-policy.md}.
+\end{itemize}
+
+\subsection{External Audit}
+
+The production build has been reviewed by an independent external auditor.
+The audit report is expected to be issued within approximately one week of
+this draft and will be published alongside this whitepaper at that time.
+\stub{Specifics --- auditor name, audit window, commit hash reviewed, report
+URL, and remediation summary --- to be inserted on report publication.}
+
+\subsection{Bug Bounty}
+
+Liquidity Party is launching as a pre-revenue protocol and is not in a
+position to commit to a formal bug bounty program prior to launch. Per
+\texttt{SECURITY.md}, severity-graded discretionary thanks are extended for
+responsible reports during the interim period. The intent is to launch a
+formal bounty (Immunefi Boost or equivalent) once launch metrics justify the
+spend. \stub{Confirm severity bands and payout caps once committed.}
+
+\subsection{Vulnerability Disclosure}
+
+Security reports are routed privately to
+\texttt{tim@dexorder.com} or via direct message to
+\href{https://x.com/LiquidityParty}{\texttt{@LiquidityParty}} on X. Public
+GitHub issues for security vulnerabilities are explicitly discouraged. The
+disclosure SLA is acknowledgement within 24 hours and a coordinated
+disclosure timeline scaled to severity. The reporter is credited at their
+option once the issue is mitigated. The full policy lives in
+\texttt{SECURITY.md}.
+
+\subsection{Out of Scope}
+
+Per \texttt{SECURITY.md}, the following are out of scope:
+
+\begin{itemize}
+  \item Test fixtures, mocks, and helpers under \texttt{test/}.
+  \item Issues that require a compromised admin key as a precondition. Admin
+        keys can \texttt{kill()} a pool and redirect protocol fees, but
+        cannot reach LP reserves; this is documented as accepted risk in
+        \texttt{doc/security/threat-model.md} \S11.N7 and
+        \texttt{doc/security/admin-powers.md}.
+\end{itemize}
+
+\section{Risk Management}
+\label{sec:risk}
+
+\subsection{Slot Drainage Is Expected LP Behaviour}
+\label{sec:drainage}
+
+\textbf{Slots in a Liquidity Party pool will drain. This is normal,
+expected, and intentional.} The protocol's deployment strategy is to
+calibrate $(C, \kappa)$ for maximum LP net return after impermanent loss
+(\S\ref{sec:fee-calibration}). Optimizing for net LP return implies that
+slots whose underlying asset experiences a large persistent price move
+\emph{will} reach the drained state $q_k \approx 0$ before the pool
+internalizes the full move. This is the same trade-off every concentrated-
+liquidity AMM makes.
+
+\paragraph{Analogy: Uniswap v3 range positions.}
+A Uniswap v3 LP who posts liquidity over a finite price range collects
+fees only while the spot price is inside the range. If the price moves
+through the upper end of the range, the LP ends up holding 100\% of the
+``cheaper'' asset --- their position has converted entirely to the
+appreciated asset's pair-leg, exactly as if they had executed a market sell
+at every intermediate price along the range. Range LPs accept this as the
+fundamental staking trade-off of v3: deeper liquidity inside the range
+in exchange for full conversion at the boundary. Drainage in Liquidity
+Party is the multi-asset analogue. A pool slot is implicitly
+``range-staked'' against the rest of the basket: while the relative price
+stays within the pool's depth envelope, the slot earns fees on the LMSR
+quote; if the external market moves the slot's price far enough that the
+pool can fund cheaper-than-external swaps until the slot empties,
+arbitrageurs will drain it. The maximum single-slot external move the
+pool can absorb before drain is
+\begin{equation}
+  R_{\mathrm{p,max}} \;=\; \exp\!\left(\frac{1}{\kappa\,(n - 1)}\right)
+\end{equation}
+(\S\ref{sec:kappa}); past that, the slot empties and the basket settles in
+the LP's hands without that asset.
+
+\paragraph{What the LP retains after a drain.}
+A drained slot does not impair the LP's redemption rights. Proportional
+\texttt{burn} continues to work and returns the LP their share of every
+slot that still has reserves. Single-asset \texttt{burnSwap} into the
+drained asset returns nothing for that slot but treats the drained slot as
+zero-contribution rather than reverting; \texttt{burnSwap} into a
+non-drained asset still works. The LP's economic position after a slot
+drain is equivalent to holding the surviving basket --- exactly the
+position a v3 LP holds after a one-sided range exit.
+
+\paragraph{Industry framing.}
+Drainage in this sense is the industry-standard cost of providing
+concentrated liquidity. Liquidity Party does not promise to retain every
+asset under every market scenario; it promises (a) pro-rata redemption of
+whatever the pool currently holds, (b) LP-favoring rounding and approximation
+at every step, and (c) a fee schedule calibrated to maximize the LP's net
+return inclusive of expected drainage events. LPs participating in pools
+that hold uncorrelated or highly volatile assets should expect drain
+events on individual slots and should size their participation accordingly.
+
+\subsection{LP Loss Bound}
+
+Under constant $b$, classical LMSR admits a worst-case loss bound of
+$b\,\ln n$ in the payoff num\'eraire. With $\bofq = \kappa\,\Sm$, the
+per-state bound scales with the current size metric: instantaneous worst-case
+loss $\bofq\,\ln n = \kappa\,\Sm\,\ln n$, or $\kappa\,\ln n$ per unit of
+$\Sm$. Because $b$ varies with state, global worst-case loss along an
+arbitrary path depends on how $\Sm$ evolves; the proportionality clarifies
+how risk scales with deployed liquidity.
+
+\subsection{Liquidity-Manipulation Resistance}
+
+Every operation that changes $\Sm$ is priced through the same LMSR potential
+that prices ordinary swaps:
+
+\begin{itemize}
+  \item Proportional mint and burn are exact scalings:
+        $\mathbf{q} \mapsto (1+\alpha)\mathbf{q}$ implies
+        $b \mapsto (1+\alpha)b$ and every pairwise marginal ratio is
+        invariant. A proportional mint followed by its exact inverse returns
+        the pool to the same state with no net transfer.
+  \item Single-asset mint and burn (\texttt{swapMint}, \texttt{burnSwap})
+        decompose into a proportional rescaling composed with a bundle of
+        LMSR swaps priced by the same convex potential. The cost of changing
+        $\Sm$ is the sum of kernel-priced components; there is no off-market
+        ``free'' lever to change $b$.
+\end{itemize}
+
+Because $C(\mathbf{q})$ is convex, the net kernel cost of any closed cycle of
+allowed operations sums to zero in the fee-free idealization; any practical
+implementation cost (fees, rounding, midpoint approximation error) makes the
+cycle strictly loss-making for the attacker. The midpoint-$b$ approximation
+is bounded never to overshoot the true LS-LMSR cost, and the
+\texttt{swapMint}--\texttt{burnSwap} round-trip drift is bounded at $\le 2$
+bps in adversarial regimes (\texttt{security/drainage-guidelines.md} \S7).
+
+\subsection{Numerical Envelope}
+
+The kernel's cost-preservation residual sits below $10^{-9}$ relative across
+the production-relevant range of pool imbalances ($R_q \le 10^7$) and degrades
+gracefully past that. The ABDK exp/ln round-trip noise floor is
+$\sim 2 \times 10^{-16}$ relative; production tolerances are bound at
+$10^{-9}$, leaving seven orders of magnitude of headroom (see
+\texttt{security/drainage-guidelines.md} \S3, \S4).
+
+\subsection{Operational Mitigations}
+
+\begin{itemize}
+  \item User \texttt{minAmountOut} / \texttt{maxAmountIn} bounds on every
+        state-mutating entry point.
+  \item Capacity caps on outputs ($y \le q_j$), enforced inside the kernel.
+  \item Minimum-balance constraints on \texttt{initialMint} (every initial
+        deposit must be strictly positive; \texttt{$\beta_i > 0$} enforced at
+        deploy time).
+  \item Off-chain drift monitoring with yellow/red thresholds on the
+        slot-drain ratio $\min q_i / (\Sm/n)$ and the q-ratio
+        $\max q / \min q$.
+  \item \texttt{kill()} as the last-resort lever, preserving proportional
+        burn for LP exit.
+\end{itemize}
+
+\subsection{Out-of-Scope Token Classes}
+
+The protocol does not support, and the trusted-deployer policy MUST NOT
+list:
+
+\begin{itemize}
+  \item Fee-on-transfer tokens.
+  \item Rebasing tokens.
+  \item ERC-777-style hook tokens, ERC-677 \texttt{transferAndCall} tokens,
+        any token that callbacks during \texttt{transfer} or
+        \texttt{transferFrom}.
+  \item Multi-address proxy tokens.
+  \item Tokens whose owner can later add fees, pause transfers, or
+        blacklist addresses (mutable post-list governance).
+\end{itemize}
+
+A token that the validator clears today but later mutates into one of the
+above classes is a class-2 hazard; the response is \texttt{kill()}.
+
+\section{Deployment Surface}
+\label{sec:deployments}
+
+\paragraph{Initial deployment.}
+The initial production deployment targets Ethereum mainnet. The first
+planned expansion, if launch metrics support it, is Base. The protocol is
+EVM-only --- non-EVM chains are out of scope for the foreseeable future.
+Per-chain addresses (\texttt{PartyPlanner}, \texttt{PartyInfo},
+\texttt{PartyConcierge}) are published in
+\texttt{deployment/liqp-deployments.json} in the repository at launch.
+\stub{Mainnet addresses + deployment block + deployment date to be filled
+in at launch.}
+
+\paragraph{Operator key custody.}
+The admin (planner owner / pool owner) key is held on a hardware wallet.
+No further detail of the operator's internal key-management procedure is
+disclosed; the LP's security guarantee does not depend on it
+(\S\ref{sec:admin-risk}). The protocol is designed to be \emph{resilient
+against an admin-key leak}: a leaked admin key cannot reach LP reserves
+under any operation in the contract surface. The worst case under a leaked
+key is denial-of-service (\texttt{kill()} called by the attacker) plus
+redirection of not-yet-collected protocol fees; LP \texttt{burn} remains
+operational and LPs retain their pro-rata share of reserves. The core team
+retains independent ability to invoke \texttt{kill()} on the planner-owned
+pools as a final defensive measure if the admin key is compromised.
+
+\paragraph{Indexer.}
+Liquidity Party does not host a public subgraph at this time. A
+canonical metadata index will be published as a static \texttt{metadata.json}
+artefact; the exact distribution channel is to be confirmed at launch.
+\stub{Metadata index publication URL.}
+
+Integrators that need event-level data should consume the canonical event
+set directly from the chain:
+\texttt{PartyStarted}, \texttt{Mint}, \texttt{Burn}, \texttt{Swap},
+\texttt{SwapMint}, \texttt{BurnSwap}, \texttt{Flash},
+\texttt{ProtocolFeesCollected}, \texttt{Killed}.
+
+\section{Disclaimers}
+\label{sec:disclaim}
+
+\stub{This section is boilerplate pending counsel review before publication.}
+
+\paragraph{Issuer.}
+Liquidity Party is operated by Dexorder Trading Services, Ltd., a company
+incorporated in the British Virgin Islands under registration
+number 2160219.
+
+\paragraph{Access restrictions.}
+The Liquidity Party front-end blocks access from addresses appearing on the
+U.S. Office of Foreign Assets Control (OFAC) Specially Designated Nationals
+(SDN) and consolidated sanctions lists. The on-chain smart contracts are
+permissionless to interact with from any address; the access restriction is
+enforced at the front-end and any sanctioned address that interacts
+directly with the contracts does so outside the front-end's terms of
+service.
+
+\paragraph{No investment advice.}
+This whitepaper is for informational purposes only. It does not constitute
+investment advice, a solicitation of any security, or a representation as
+to the suitability of the protocol for any user, jurisdiction, or
+purpose. Past performance of the simulation environment described in
+\S\ref{sec:fee-calibration} is not indicative of future LP returns.
+
+\paragraph{No representation as to tax treatment.}
+The tax treatment of LP participation, swap activity, flash-loan activity,
+and protocol-fee distribution is jurisdiction-specific and depends on
+facts and circumstances outside the protocol's control. Users are
+responsible for their own tax compliance.
+
+\paragraph{Forward-looking statements.}
+Statements in this whitepaper regarding future deployments (Base
+expansion, formal bug bounty, metadata index), future audit report
+publication, and future protocol behaviour are forward-looking. They
+reflect current intent and are not commitments.
+
+\paragraph{Risk acknowledgement.}
+Liquidity provision in Liquidity Party pools is subject to impermanent
+loss, slot-drainage loss (\S\ref{sec:drainage}), smart-contract risk,
+oracle-independent depegging of constituent assets, bridge risk on
+wrapped-bridged assets, and the residual risks documented in
+\S\ref{sec:risk}. LPs should understand these risks before depositing.
+
+\section*{References}
+\addcontentsline{toc}{section}{References}
+
+\begin{itemize}
+  \item Hanson, R. (2002). \emph{Logarithmic Market Scoring Rules for Modular
+        Combinatorial Information Aggregation.}
+        \href{https://mason.gmu.edu/~rhanson/mktscore.pdf}{mason.gmu.edu/\textasciitilde{}rhanson/mktscore.pdf}
+  \item Othman, A., Pennock, D., Reeves, D., Sandholm, T. (2013).
+        \emph{A Practical Liquidity-Sensitive Automated Market Maker.}
+        \href{https://www.cs.cmu.edu/~sandholm/liquidity-sensitive\%20market\%20maker.EC10.pdf}{cs.cmu.edu/\textasciitilde{}sandholm/liquidity-sensitive market maker.EC10.pdf}
+  \item Olson, T., Claude Opus 4.7 (2026). \emph{Loss-Versus-Rebalancing
+        Reduced in Cross-Correlated Multi-Asset LMSR Pools.}
+        \texttt{doc/lvr-multiasset-lmsr.pdf} (this repository).
+\end{itemize}
+
+\end{document}
