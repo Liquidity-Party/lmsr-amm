@@ -9,7 +9,7 @@ import {Funding} from "../src/Funding.sol";
 import {IPartyInfo} from "../src/IPartyInfo.sol";
 import {IPartyPlanner} from "../src/IPartyPlanner.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {Deploy} from "./Deploy.sol";
 import {TestERC20} from "./TestHelpers.sol";
 
@@ -86,7 +86,7 @@ abstract contract PartyPoolBase is Test {
 
         uint256 feePpm = 1000;
 
-        int128 kappa3 = LMSRStabilized.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
+        int128 kappa3 = LMSRKernel.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
         uint256[] memory deposits3 = new uint256[](3);
         deposits3[0] = initBals[0];
         deposits3[1] = initBals[1];
@@ -106,7 +106,7 @@ abstract contract PartyPoolBase is Test {
         tokens10[8] = IERC20(address(token8));
         tokens10[9] = IERC20(address(token9));
 
-        int128 kappa10 = LMSRStabilized.computeKappaFromSlippage(tokens10.length, tradeFrac, targetSlippage);
+        int128 kappa10 = LMSRKernel.computeKappaFromSlippage(tokens10.length, tradeFrac, targetSlippage);
         uint256[] memory deposits10 = new uint256[](10);
         for (uint256 i = 0; i < 10; i++) { deposits10[i] = initBals[i]; }
         (pool10,) = Deploy.newPartyPoolWithDeposits("LP10", "LP10", tokens10, kappa10, feePpm, feePpm, false, deposits10, 0);

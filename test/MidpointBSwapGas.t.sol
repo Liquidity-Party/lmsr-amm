@@ -3,7 +3,7 @@ pragma solidity =0.8.35;
 
 import "forge-std/Test.sol";
 import "@abdk/ABDKMath64x64.sol";
-import "../src/LMSRStabilized.sol";
+import "../src/LMSRKernel.sol";
 
 /// @notice Isolated gas measurement: compare the current Hanson direct-swap kernel
 ///         against a midpoint-b variant (one extra Hanson evaluation at midpoint b).
@@ -20,7 +20,7 @@ import "../src/LMSRStabilized.sol";
 /// on a symmetric pool.
 contract MidpointBSwapGas is Test {
     using ABDKMath64x64 for int128;
-    using LMSRStabilized for LMSRStabilized.State;
+    using LMSRKernel for LMSRKernel.State;
 
     int128 internal constant ONE = 0x10000000000000000;
     int128 internal constant EXP_LIMIT = 0x200000000000000000;
@@ -35,7 +35,7 @@ contract MidpointBSwapGas is Test {
     int128[10] internal q10;
     int128 internal sumQ10;
 
-    LMSRStabilized.State internal state10;
+    LMSRKernel.State internal state10;
 
     function setUp() public {
         kappa20pct = ABDKMath64x64.divu(2, 10);
@@ -55,7 +55,7 @@ contract MidpointBSwapGas is Test {
     }
 
     // ------------------------------------------------------------------
-    // Inlined Hanson formula (mirror of LMSRStabilized.swapAmountsForExactInput @ 143)
+    // Inlined Hanson formula (mirror of LMSRKernel.swapAmountsForExactInput @ 143)
     // ------------------------------------------------------------------
 
     function _hansonY(int128 b, int128 r0, int128 a) internal pure returns (int128) {
@@ -267,7 +267,7 @@ contract MidpointBSwapGas is Test {
     function test_inlined_matches_library() public view {
         int128 a = q10[0] >> 7;
         int128 inlinedY = _swapMidpoint1(kappa20pct, sumQ10, q10[0], q10[1], a);
-        (, int128 libY) = LMSRStabilized.swapAmountsForExactInput(kappa20pct, _q10Array(), 0, 1, a);
+        (, int128 libY) = LMSRKernel.swapAmountsForExactInput(kappa20pct, _q10Array(), 0, 1, a);
         // Allow 1 ulp diff for fixed-point ops
         int128 diff = inlinedY > libY ? inlinedY - libY : libY - inlinedY;
         assertLt(uint256(int256(diff)), 4, "inlined midpoint must match library");

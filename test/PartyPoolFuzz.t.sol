@@ -5,7 +5,7 @@ pragma solidity =0.8.35;
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Funding} from "../src/Funding.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {FlashBorrower, TestERC20} from "./TestHelpers.sol";
 import {PartyPoolBase} from "./PartyPoolBase.t.sol";
 
@@ -51,7 +51,7 @@ contract PartyPoolFuzzTest is PartyPoolBase {
     /// I-11: LMSR kernel is internally consistent.
     function _assertI11(IPartyPool pool_) internal view {
         if (pool_.totalSupply() == 0) return;
-        LMSRStabilized.State memory lmsr = pool_.LMSR();
+        LMSRKernel.State memory lmsr = pool_.LMSR();
         assertTrue(lmsr.kappa > 0, "I-11: kappa must be > 0");
         int256 total = 0;
         for (uint256 i = 0; i < lmsr.qInternal.length; i++) {

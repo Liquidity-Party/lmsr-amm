@@ -12,7 +12,7 @@ import {IERC3156FlashBorrower} from "../lib/openzeppelin-contracts/contracts/int
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IPartyInfo} from "../src/IPartyInfo.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {NativeWrapper} from "../src/NativeWrapper.sol";
 import {PartyInfo} from "../src/PartyInfo.sol";
 import {PartyConcierge} from "../src/PartyConcierge.sol";
@@ -102,7 +102,7 @@ contract DeploySepolia is Script {
         initialDeposits[0] = 10_000 * _bases[0] / _prices[0];
         initialDeposits[1] = 10_000 * _bases[1] / _prices[1];
         initialDeposits[2] = 10_000 * _bases[2] / _prices[2];
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(3, ABDKMath64x64.divu(1, 10), ABDKMath64x64.divu(50,10000));
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(3, ABDKMath64x64.divu(1, 10), ABDKMath64x64.divu(50,10000));
 
         // call full newPool signature on factory which will take the deposits and mint initial LP
         console2.log('deploying exercise pool');

@@ -20,7 +20,7 @@ constructor-validated `numTokens()` (≤ 10) or a `for`-local bisection iter cap
 |---|---|
 | `src/PartyPoolExtraImpl.sol` | 54 |
 | `src/PartyPoolMintImpl.sol`  | 187, 246, 264, 324 |
-| `src/LMSRStabilized.sol`     | 38, 218, 235, 245, 348, 381, 470, 489, 494, 501, 517, 528, 536, 546, 599, 732, 748, 829 |
+| `src/LMSRKernel.sol`     | 38, 218, 235, 245, 348, 381, 470, 489, 494, 501, 517, 528, 536, 546, 599, 732, 748, 829 |
 | `src/PartyPoolStorage.sol`   | 97 |
 | `src/PartyPoolHelpers.sol`   | 45 |
 | `src/PartyInfo.sol`          | 197 |

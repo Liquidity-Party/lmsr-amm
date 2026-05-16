@@ -9,7 +9,7 @@ import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20
 import {Funding} from "../src/Funding.sol";
 import {IPartyInfo} from "../src/IPartyInfo.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {Deploy} from "./Deploy.sol";
 import {TestERC20} from "./TestHelpers.sol";
 
@@ -52,7 +52,7 @@ abstract contract ImbalancedBase is Test {
     //   MILD            — within the "fuzz-tested envelope": 3x ratio
     //   MODERATE        — well past balanced, kernel precision still tight: 100x
     //   EXTREME         — near the documented 1 ppm cliff: 1e4x
-    //   NEAR_EXP_LIMIT  — into the EXP_LIMIT branch of LMSRStabilized: 1e6x+
+    //   NEAR_EXP_LIMIT  — into the EXP_LIMIT branch of LMSRKernel: 1e6x+
     //   ONE_TINY        — one slot dust-empty, others uniform large
     enum Skew { MILD, MODERATE, EXTREME, NEAR_EXP_LIMIT, ONE_TINY }
 
@@ -135,7 +135,7 @@ abstract contract ImbalancedBase is Test {
 
         int128 tradeFrac = ABDKMath64x64.divu(100, 10_000);     // 1%
         int128 targetSlip = ABDKMath64x64.divu(10, 10_000);     // 0.1%
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(n, tradeFrac, targetSlip);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(n, tradeFrac, targetSlip);
 
         (dp.pool, ) = Deploy.newPartyPoolWithDeposits(
             "ImbLP", "ImbLP",
@@ -261,7 +261,7 @@ abstract contract ImbalancedBase is Test {
     /// @notice I-11: kappa > 0, qInternal[i] >= 0, sum > 0.
     function _assertI11(DeployedPool memory dp, string memory tag) internal view {
         if (dp.pool.totalSupply() == 0) return;
-        LMSRStabilized.State memory lmsr = dp.pool.LMSR();
+        LMSRKernel.State memory lmsr = dp.pool.LMSR();
         assertTrue(lmsr.kappa > 0, string(abi.encodePacked(tag, ": I-11 kappa<=0")));
         int256 total = 0;
         for (uint256 i = 0; i < lmsr.qInternal.length; i++) {

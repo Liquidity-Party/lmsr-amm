@@ -2,7 +2,7 @@
 pragma solidity =0.8.35;
 
 import "forge-std/Test.sol";
-import "../src/LMSRStabilized.sol";
+import "../src/LMSRKernel.sol";
 import "../lib/abdk-libraries-solidity/ABDKMath64x64.sol";
 
 /// @notice Sweep test: how does midpoint-b kernel precision degrade as q values
@@ -109,7 +109,7 @@ contract ImbalancePrecisionSweepTest is Test {
     function callSwap(int128 kappa, int128[] memory q, uint256 i, uint256 j, int128 a)
         external pure returns (int128, int128)
     {
-        return LMSRStabilized.swapAmountsForExactInput(kappa, q, i, j, a);
+        return LMSRKernel.swapAmountsForExactInput(kappa, q, i, j, a);
     }
 
     /// Sweep imbalance ratio from 1x (balanced) up to 1e8x. Log the residual.

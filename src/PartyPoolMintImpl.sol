@@ -9,7 +9,7 @@ import {Funding} from "./Funding.sol";
 import {IPartyPool} from "./IPartyPool.sol";
 import {IPermit2} from "./IPermit2.sol";
 import {NativeWrapper} from "./NativeWrapper.sol";
-import {LMSRStabilized} from "./LMSRStabilized.sol";
+import {LMSRKernel} from "./LMSRKernel.sol";
 import {PartyPoolPermit2Witness} from "./PartyPoolPermit2Witness.sol";
 import {
     PoolState, _ps,
@@ -21,7 +21,7 @@ import {
 
 library PartyPoolMintImpl {
     using ABDKMath64x64 for int128;
-    using LMSRStabilized for LMSRStabilized.State;
+    using LMSRKernel for LMSRKernel.State;
     using SafeERC20 for IERC20;
 
     // ── Token transfer helpers ─────────────────────────────────────────────────
@@ -412,13 +412,13 @@ library PartyPoolMintImpl {
 
     /// @notice Exact-in quote for a single-token swap-mint (pure).
     /// @dev Given a budget `maxAmountIn`, returns the actual deposit consumed,
-    ///      LP minted, and fee. Iterates inside `LMSRStabilized.swapAmountsForMint`
+    ///      LP minted, and fee. Iterates inside `LMSRKernel.swapAmountsForMint`
     ///      using post-state b for round-trip safety with burnSwap.
     function swapMintAmounts(
         uint256 inputTokenIndex,
         uint256 lpAmountOut,
         uint256 swapFeePpm,
-        LMSRStabilized.State memory lmsrState,
+        LMSRKernel.State memory lmsrState,
         uint256[] memory bases_,
         uint256 totalSupply_
     ) public pure returns (uint256 amountIn, uint256 inFee) {
@@ -434,7 +434,7 @@ library PartyPoolMintImpl {
         require(beta > int128(0), "too small");
 
         int128 amountInInternal =
-            LMSRStabilized.swapAmountsForMint(lmsrState.kappa, lmsrState.qInternal, inputTokenIndex, beta);
+            LMSRKernel.swapAmountsForMint(lmsrState.kappa, lmsrState.qInternal, inputTokenIndex, beta);
 
         uint256 amountInUsed = _libInternalToUintCeilPure(amountInInternal, bases_[inputTokenIndex]);
         require(amountInUsed > 0, "too small");
@@ -487,7 +487,7 @@ library PartyPoolMintImpl {
             qFromCached[idx] = ABDKMath64x64.divu(s._cachedUintBalances[idx], bases[idx]);
             unchecked { idx++; }
         }
-        int128 amountInInternal = LMSRStabilized.swapAmountsForMint(
+        int128 amountInInternal = LMSRKernel.swapAmountsForMint(
             s._lmsr.kappa, qFromCached, inputTokenIndex, beta
         );
 
@@ -556,7 +556,7 @@ library PartyPoolMintImpl {
         uint256 lpAmount,
         uint256 outputTokenIndex,
         uint256 swapFeePpm,
-        LMSRStabilized.State memory lmsrState,
+        LMSRKernel.State memory lmsrState,
         uint256[] memory bases_,
         uint256 totalSupply_
     ) public pure returns (uint256 amountOut, uint256 outFee) {
@@ -569,7 +569,7 @@ library PartyPoolMintImpl {
         // Only payoutInternal is needed; amountIn (= alpha * S) is recomputed by the
         // caller from `alpha` if required.
         // slither-disable-next-line unused-return
-        (, int128 payoutInternal) = LMSRStabilized.swapAmountsForBurn(lmsrState.kappa, lmsrState.qInternal,
+        (, int128 payoutInternal) = LMSRKernel.swapAmountsForBurn(lmsrState.kappa, lmsrState.qInternal,
             outputTokenIndex, alpha);
 
         uint256 grossAmountOut = ABDKMath64x64.mulu(payoutInternal, bases_[outputTokenIndex]);
@@ -618,7 +618,7 @@ library PartyPoolMintImpl {
         }
         // Only payoutInternal is needed in this branch.
         // slither-disable-next-line unused-return
-        (, int128 payoutInternal) = LMSRStabilized.swapAmountsForBurn(
+        (, int128 payoutInternal) = LMSRKernel.swapAmountsForBurn(
             s._lmsr.kappa, qFromCached, outputTokenIndex, alpha
         );
 

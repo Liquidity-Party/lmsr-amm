@@ -5,11 +5,11 @@ import {IERC3156FlashBorrower} from "../lib/openzeppelin-contracts/contracts/int
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "../lib/openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {IOwnable} from "./IOwnable.sol";
-import {LMSRStabilized} from "./LMSRStabilized.sol";
+import {LMSRKernel} from "./LMSRKernel.sol";
 import {NativeWrapper} from "./NativeWrapper.sol";
 
 /// @title PartyPool - LMSR-backed multi-asset pool with LP ERC20 token
-/// @notice A multi-asset liquidity pool backed by the LMSRStabilized pricing model.
+/// @notice A multi-asset liquidity pool backed by the LMSRKernel pricing model.
 /// The pool issues an ERC20 LP token representing proportional ownership.
 /// It supports:
 /// - Proportional minting and burning of LP tokens,
@@ -94,7 +94,7 @@ interface IPartyPool is IERC20Metadata, IOwnable {
 
     // LMSR is an acronym (Logarithmic Market Scoring Rule); upper-case is intentional.
     // slither-disable-next-line naming-convention
-    function LMSR() external view returns (LMSRStabilized.State memory);
+    function LMSR() external view returns (LMSRKernel.State memory);
 
     /// @notice Token addresses comprising the pool. Effectively immutable after construction.
     /// @dev tokens[i] corresponds to the i-th asset and maps to index i in the internal LMSR arrays.

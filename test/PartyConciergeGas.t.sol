@@ -8,7 +8,7 @@ import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20
 import {IPartyPlanner} from "../src/IPartyPlanner.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
 import {IPermit2} from "../src/IPermit2.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {PartyConcierge} from "../src/PartyConcierge.sol";
 import {Deploy} from "./Deploy.sol";
 import {TestERC20} from "./TestHelpers.sol";
@@ -41,7 +41,7 @@ contract ConciergeBenchTest is Test {
             tokens[i].approve(address(planner), INIT_BAL);
         }
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(numTokens, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(numTokens, tradeFrac, targetSlippage);
         string memory poolName = string(abi.encodePacked("LP", vm.toString(numTokens)));
         (pool,) = planner.newPool(poolName, poolName, tokens, kappa, 1000, 1000,
             address(this), address(this), deposits, 0, 0);

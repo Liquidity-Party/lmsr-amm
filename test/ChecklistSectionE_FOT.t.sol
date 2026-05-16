@@ -6,7 +6,7 @@ import {ABDKMath64x64} from "../lib/abdk-libraries-solidity/ABDKMath64x64.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Test} from "../lib/forge-std/src/Test.sol";
 import {IPartyPlanner} from "../src/IPartyPlanner.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {Deploy} from "./Deploy.sol";
 import {MockERC20} from "./MockERC20.sol";
 import {MockFeeOnTransfer} from "./mocks/MockFeeOnTransfer.sol";
@@ -41,7 +41,7 @@ contract ChecklistSectionE_FOT_Test is Test {
         fot.approve(address(planner), deposits[0]);
         normal.approve(address(planner), deposits[1]);
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(
             tokens.length,
             ABDKMath64x64.divu(100, 10_000),
             ABDKMath64x64.divu(10, 10_000)

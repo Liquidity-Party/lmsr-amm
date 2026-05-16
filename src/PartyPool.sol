@@ -9,7 +9,7 @@ import {ERC20External} from "./ERC20External.sol";
 import {Funding} from "./Funding.sol";
 import {IPartyPool} from "./IPartyPool.sol";
 import {IPermit2} from "./IPermit2.sol";
-import {LMSRStabilized} from "./LMSRStabilized.sol";
+import {LMSRKernel} from "./LMSRKernel.sol";
 import {NativeWrapper} from "./NativeWrapper.sol";
 import {OwnableExternal} from "./OwnableExternal.sol";
 import {OwnableInternal} from "./OwnableInternal.sol";
@@ -20,7 +20,7 @@ import {PartyPoolPermit2Witness} from "./PartyPoolPermit2Witness.sol";
 import {IPartyPoolDeployer} from "./IPartyPoolDeployer.sol";
 
 /// @title PartyPool - LMSR-backed multi-asset pool with LP ERC20 token
-/// @notice A multi-asset liquidity pool backed by the LMSRStabilized pricing model.
+/// @notice A multi-asset liquidity pool backed by the LMSRKernel pricing model.
 /// The pool issues an ERC20 LP token representing proportional ownership.
 /// It supports:
 /// - Proportional minting and burning of LP tokens,
@@ -36,7 +36,7 @@ import {IPartyPoolDeployer} from "./IPartyPoolDeployer.sol";
 /// mints are disabled, and only the burn() method remains functional to allow LP's to withdraw their assets.
 contract PartyPool is PartyPoolBase, OwnableExternal, ERC20External, IPartyPool {
     using ABDKMath64x64 for int128;
-    using LMSRStabilized for LMSRStabilized.State;
+    using LMSRKernel for LMSRKernel.State;
     using SafeERC20 for IERC20;
 
     /// @notice Accepts native ETH only from the configured wrapper (e.g. WETH9 during `withdraw`).
@@ -95,7 +95,7 @@ contract PartyPool is PartyPoolBase, OwnableExternal, ERC20External, IPartyPool 
     // LMSR is the named acronym (Logarithmic Market Scoring Rule); the getter is
     // intentionally upper-case to match the literature and the IPartyPool interface.
     // slither-disable-next-line naming-convention
-    function LMSR() external view returns (LMSRStabilized.State memory) { return _lmsr; }
+    function LMSR() external view returns (LMSRKernel.State memory) { return _lmsr; }
 
     constructor()
     {

@@ -5,7 +5,7 @@ import {ABDKMath64x64} from "../lib/abdk-libraries-solidity/ABDKMath64x64.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IPartyPool} from "./IPartyPool.sol";
 import {IPartyInfo} from "./IPartyInfo.sol";
-import {LMSRStabilized} from "./LMSRStabilized.sol";
+import {LMSRKernel} from "./LMSRKernel.sol";
 import {PartyPoolHelpers} from "./PartyPoolHelpers.sol";
 import {PartyPoolMintImpl} from "./PartyPoolMintImpl.sol";
 
@@ -17,7 +17,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
     function working(IPartyPool pool) external view returns (bool) {
         if (pool.killed())
             return false;
-        LMSRStabilized.State memory s = pool.LMSR();
+        LMSRKernel.State memory s = pool.LMSR();
         for( uint i=0; i<s.qInternal.length; i++ )
             if (s.qInternal[i] > 0)
                 return true;
@@ -60,10 +60,10 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
 
     /// @inheritdoc IPartyInfo
     function price(IPartyPool pool, uint256 inputTokenIndex, uint256 outputTokenIndex) external view returns (uint256) {
-        LMSRStabilized.State memory lmsr = pool.LMSR();
+        LMSRKernel.State memory lmsr = pool.LMSR();
         uint256 nAssets = lmsr.qInternal.length;
         require(inputTokenIndex < nAssets && outputTokenIndex < nAssets, "price: idx");
-        int128 p = LMSRStabilized.price(lmsr.kappa, lmsr.qInternal, inputTokenIndex, outputTokenIndex);
+        int128 p = LMSRKernel.price(lmsr.kappa, lmsr.qInternal, inputTokenIndex, outputTokenIndex);
         require(p > 0, "price: non-positive");
         uint256[] memory denoms = denominators(pool);
         return (uint256(int256(p)) * denoms[outputTokenIndex] << 64) / denoms[inputTokenIndex];
@@ -109,7 +109,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         uint256 maxAmountIn
     ) external view returns (uint256 amountIn, uint256 amountOut, uint256 inFee) {
         require(inputTokenIndex != outputTokenIndex, "i == j");
-        LMSRStabilized.State memory lmsr = pool.LMSR();
+        LMSRKernel.State memory lmsr = pool.LMSR();
         uint256 nAssets = lmsr.qInternal.length;
         require(inputTokenIndex < nAssets && outputTokenIndex < nAssets, "swapAmounts: idx");
 
@@ -124,7 +124,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         int128 deltaInternalI = ABDKMath64x64.divu(netUintForSwap, baseI);
         require(deltaInternalI > int128(0), "too small");
 
-        (int128 amountInInternalUsed, int128 amountOutInternal) = LMSRStabilized.swapAmountsForExactInput(
+        (int128 amountInInternalUsed, int128 amountOutInternal) = LMSRKernel.swapAmountsForExactInput(
             lmsr.kappa, lmsr.qInternal, inputTokenIndex, outputTokenIndex, deltaInternalI
         );
 
@@ -147,7 +147,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
     ) external view returns (uint256 amountIn, uint256 inFee) {
         require(inputTokenIndex != outputTokenIndex, "i == j");
         require(amountOut > 0, "invalid amount");
-        LMSRStabilized.State memory lmsr = pool.LMSR();
+        LMSRKernel.State memory lmsr = pool.LMSR();
         uint256 nAssets = lmsr.qInternal.length;
         require(inputTokenIndex < nAssets && outputTokenIndex < nAssets, "swapAmounts: idx");
 
@@ -159,7 +159,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         int128 yInternal = _internalCeilFromUint(amountOut, bases[outputTokenIndex]);
         require(yInternal > int128(0), "too small");
 
-        int128 amountInInternal = LMSRStabilized.amountInForExactOutput(
+        int128 amountInInternal = LMSRKernel.amountInForExactOutput(
             lmsr.kappa, lmsr.qInternal, inputTokenIndex, outputTokenIndex, yInternal
         );
         uint256 baseI = bases[inputTokenIndex];
@@ -197,7 +197,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         uint256 outputTokenIndex,
         uint256 minPrice
     ) external view returns (uint256 amountIn, uint256 amountOut, uint256 inFee) {
-        LMSRStabilized.State memory lmsr = pool.LMSR();
+        LMSRKernel.State memory lmsr = pool.LMSR();
         uint256 nAssets = lmsr.qInternal.length;
         require(inputTokenIndex < nAssets && outputTokenIndex < nAssets, "swapAmounts: idx");
         require(minPrice > 0, "swapAmounts: limit=0");
@@ -213,7 +213,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         int128 kappa  = lmsr.kappa;
         int128[] memory q = lmsr.qInternal;
 
-        int128 r0 = LMSRStabilized.price(kappa, q, inputTokenIndex, outputTokenIndex);
+        int128 r0 = LMSRKernel.price(kappa, q, inputTokenIndex, outputTokenIndex);
         require(r0 > target, "swapAmounts: price at or below target");
 
         int128 S = _computeSizeMetric(q);
@@ -231,7 +231,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
 
             // We only need yMid here; aMid is the search variable.
             // slither-disable-next-line unused-return
-            (, int128 yMid) = LMSRStabilized.swapAmountsForExactInput(kappa, q, inputTokenIndex, outputTokenIndex, aMid);
+            (, int128 yMid) = LMSRKernel.swapAmountsForExactInput(kappa, q, inputTokenIndex, outputTokenIndex, aMid);
 
             // P_fwd after trial fill aMid.
             int128 diffNew  = q[outputTokenIndex].sub(yMid).sub(q[inputTokenIndex].add(aMid));
@@ -266,7 +266,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
     // slither-disable-next-line unused-return
     function swapMintAmounts(IPartyPool pool, uint256 inputTokenIndex, uint256 lpAmountOut) external view
     returns (uint256 amountInUsed, uint256 inFee) {
-        LMSRStabilized.State memory lmsr = pool.LMSR();
+        LMSRKernel.State memory lmsr = pool.LMSR();
         uint256[] memory bases_ = denominators(pool);
         // Use fee-inclusive cached balances so this quote matches swapMint() execution,
         // which prices against cached/base rather than the stale s._lmsr.qInternal.
@@ -304,7 +304,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         uint256 supply = pool.totalSupply();
         require(supply > 0, "uninitialized");
         uint256 feePpm = fees(pool)[inputTokenIndex];
-        LMSRStabilized.State memory lmsr = pool.LMSR();
+        LMSRKernel.State memory lmsr = pool.LMSR();
         uint256[] memory bases_ = denominators(pool);
         // Use fee-inclusive cached balances so bisection quotes match swapMint() execution.
         uint256[] memory cached = pool.balances();
@@ -372,7 +372,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         uint256 inputTokenIndex,
         uint256 lpAmountOut,
         uint256 feePpm,
-        LMSRStabilized.State memory lmsr,
+        LMSRKernel.State memory lmsr,
         uint256[] memory bases_,
         uint256 supply
     ) internal view returns (bool ok, uint256 amountInUsed, uint256 inFee) {
@@ -395,7 +395,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         uint256 inputTokenIndex,
         uint256 lpAmountOut,
         uint256 feePpm,
-        LMSRStabilized.State memory lmsr,
+        LMSRKernel.State memory lmsr,
         uint256[] memory bases_,
         uint256 supply
     ) external pure returns (uint256 amountInUsed, uint256 inFee) {
@@ -408,7 +408,7 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
     // slither-disable-next-line unused-return
     function burnSwapAmounts(IPartyPool pool, uint256 lpAmount, uint256 outputTokenIndex) external view
     returns (uint256 amountOut, uint256 outFee) {
-        LMSRStabilized.State memory lmsr = pool.LMSR();
+        LMSRKernel.State memory lmsr = pool.LMSR();
         uint256[] memory bases_ = denominators(pool);
         // Use fee-inclusive cached balances so this quote matches burnSwap() execution,
         // which prices against cached/base rather than the stale s._lmsr.qInternal.

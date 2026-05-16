@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity =0.8.35;
 
-import "../../src/LMSRStabilized.sol";
-import "./LMSRStabilizedBalancedPair.sol";
-import "../../test/LMSRStabilizedBase.t.sol";
+import "../../src/LMSRKernel.sol";
+import "./LMSRKernelBalancedPair.sol";
+import "../../test/LMSRKernelBase.t.sol";
 
-/// @notice REFERENCE-ONLY tests for the deprecated `LMSRStabilizedBalancedPair` approximation.
-/// @dev Preserved alongside `doc/reference/LMSRStabilizedBalancedPair.sol` to document the
+/// @notice REFERENCE-ONLY tests for the deprecated `LMSRKernelBalancedPair` approximation.
+/// @dev Preserved alongside `doc/reference/LMSRKernelBalancedPair.sol` to document the
 ///      BP fast-path idea for a possible v2. Not compiled by the production build.
-contract LMSRStabilizedBalancedPairTest is LMSRStabilizedBase {
-    using LMSRStabilized for LMSRStabilized.State;
+contract LMSRKernelBalancedPairTest is LMSRKernelBase {
+    using LMSRKernel for LMSRKernel.State;
     using ABDKMath64x64 for int128;
 
     // --- Balanced pair approximation tests ---
@@ -22,7 +22,7 @@ contract LMSRStabilizedBalancedPairTest is LMSRStabilizedBase {
 
         int128 a = q[0].mul(ABDKMath64x64.divu(1, 1000));
 
-        (int128 inApprox, int128 outApprox) = LMSRStabilizedBalancedPair.swapAmountsForExactInput(s, 0, 1, a);
+        (int128 inApprox, int128 outApprox) = LMSRKernelBalancedPair.swapAmountsForExactInput(s, 0, 1, a);
         (int128 inExact, int128 outExact) = s.swapAmountsForExactInput(0, 1, a);
 
         assertTrue(outExact > 0, "Exact output should be positive");
@@ -73,7 +73,7 @@ contract LMSRStabilizedBalancedPairTest is LMSRStabilizedBase {
 
         int128 a = newQ[0].mul(ABDKMath64x64.divu(1, 1000));
 
-        (int128 inApprox, int128 outApprox) = LMSRStabilizedBalancedPair.swapAmountsForExactInput(s, 0, 1, a);
+        (int128 inApprox, int128 outApprox) = LMSRKernelBalancedPair.swapAmountsForExactInput(s, 0, 1, a);
         (int128 inExact, int128 outExact) = s.swapAmountsForExactInput(0, 1, a);
 
         assertEq(inApprox, inExact, "fallback should return identical amountIn");
@@ -89,7 +89,7 @@ contract LMSRStabilizedBalancedPairTest is LMSRStabilizedBase {
         int128 b = _computeB(q);
         int128 a = b.mul(ABDKMath64x64.divu(3, 4));
 
-        (int128 inApprox, int128 outApprox) = LMSRStabilizedBalancedPair.swapAmountsForExactInput(s, 0, 1, a);
+        (int128 inApprox, int128 outApprox) = LMSRKernelBalancedPair.swapAmountsForExactInput(s, 0, 1, a);
         (int128 inExact, int128 outExact) = s.swapAmountsForExactInput(0, 1, a);
 
         assertEq(inApprox, inExact, "fallback on large input should return identical amountIn");

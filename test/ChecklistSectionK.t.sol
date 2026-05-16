@@ -19,7 +19,7 @@ import {Funding} from "../src/Funding.sol";
 import {IOwnable} from "../src/IOwnable.sol";
 import {IPartyPlanner} from "../src/IPartyPlanner.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {PartyPlanner} from "../src/PartyPlanner.sol";
 import {PartyPool} from "../src/PartyPool.sol";
 
@@ -54,7 +54,7 @@ contract ChecklistSectionK is Test {
 
         int128 tradeFrac      = ABDKMath64x64.divu(100, 10_000);
         int128 targetSlippage = ABDKMath64x64.divu(10, 10_000);
-        int128 kappa          = LMSRStabilized.computeKappaFromSlippage(2, tradeFrac, targetSlippage);
+        int128 kappa          = LMSRKernel.computeKappaFromSlippage(2, tradeFrac, targetSlippage);
 
         uint256[] memory deposits = new uint256[](2);
         deposits[0] = INIT_BAL;
@@ -159,7 +159,7 @@ contract ChecklistSectionK is Test {
         IERC20[] memory tokens = new IERC20[](2);
         tokens[0] = IERC20(address(token0));
         tokens[1] = IERC20(address(token1));
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(
             2, ABDKMath64x64.divu(100, 10_000), ABDKMath64x64.divu(10, 10_000)
         );
         uint256[] memory deposits = new uint256[](2);

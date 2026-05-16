@@ -16,7 +16,7 @@ import {Funding} from "../src/Funding.sol";
 import {IPartyInfo} from "../src/IPartyInfo.sol";
 import {IPartyPlanner} from "../src/IPartyPlanner.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {PartyPoolDeployer} from "../src/PartyPoolDeployer.sol";
 import {PartySwapCallbackVerifier} from "../src/PartySwapCallbackVerifier.sol";
 import {Deploy} from "./Deploy.sol";
@@ -191,7 +191,7 @@ contract FundingTest is Test {
 
         // Deploy pool with a small fee (0.1%)
         uint256 feePpm = 1000;
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
 
         planner = Deploy.newPartyPlanner();
         uint256[] memory deposits = new uint256[](tokens.length);
@@ -480,7 +480,7 @@ contract FundingTest is Test {
         tokens[2] = IERC20(address(token2));
 
         uint256 feePpm = 1000;
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
         uint256[] memory deposits = new uint256[](tokens.length);
         for(uint256 i=0; i<deposits.length; i++)
             deposits[i] = INIT_BAL;
@@ -508,7 +508,7 @@ contract FundingTest is Test {
         tokens[2] = IERC20(address(token2));
 
         uint256 feePpm = 1000;
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
         uint256[] memory deposits = new uint256[](tokens.length);
         for(uint256 i=0; i<deposits.length; i++)
             deposits[i] = INIT_BAL;
@@ -742,7 +742,7 @@ contract FundingTest is Test {
         );
         vm.stopPrank();
 
-        LMSRStabilized.State memory lmsrRef = refPool.LMSR();
+        LMSRKernel.State memory lmsrRef = refPool.LMSR();
         int256 refQDelta = lmsrRef.qInternal[0]; // qInternal after reference swap
 
         uint256 protoFee = refFee * testPool.protocolFeePpm() / 1_000_000;
@@ -756,7 +756,7 @@ contract FundingTest is Test {
         vm.prank(alice);
         token0.approve(address(cb), type(uint256).max);
 
-        LMSRStabilized.State memory lmsrBefore = testPool.LMSR();
+        LMSRKernel.State memory lmsrBefore = testPool.LMSR();
 
         vm.recordLogs();
         (uint256 amountIn, uint256 amountOut, uint256 fee) = testPool.swap(
@@ -777,7 +777,7 @@ contract FundingTest is Test {
 
         // qInternal[0] delta on testPool must match qInternal[0] on refPool
         // (kernel only priced the requested amount, not the excess)
-        LMSRStabilized.State memory lmsrAfter = testPool.LMSR();
+        LMSRKernel.State memory lmsrAfter = testPool.LMSR();
         int256 testQDelta  = lmsrAfter.qInternal[0]  - lmsrBefore.qInternal[0];
         int256 refQDeltaAbs = lmsrRef.qInternal[0] - lmsrBefore.qInternal[0];
         assertEq(testQDelta, refQDeltaAbs,
@@ -806,7 +806,7 @@ contract FundingTest is Test {
         tokens[1] = IERC20(address(token1));
         tokens[2] = IERC20(address(token2));
         uint256 feePpm = 1000;
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
         uint256[] memory deposits = new uint256[](3);
         deposits[0] = INIT_BAL; deposits[1] = INIT_BAL; deposits[2] = INIT_BAL;
         token0.mint(address(this), INIT_BAL * 2);

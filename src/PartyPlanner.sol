@@ -7,7 +7,7 @@ import {IPartyPlanner} from "./IPartyPlanner.sol";
 import {IPartyPool} from "./IPartyPool.sol";
 import {IPartyPoolDeployer} from "./IPartyPoolDeployer.sol";
 import {IPermit2} from "./IPermit2.sol";
-import {LMSRStabilized} from "./LMSRStabilized.sol";
+import {LMSRKernel} from "./LMSRKernel.sol";
 import {NativeWrapper} from "./NativeWrapper.sol";
 import {OwnableExternal} from "./OwnableExternal.sol";
 import {OwnableInternal} from "./OwnableInternal.sol";
@@ -265,7 +265,7 @@ contract PartyPlanner is PartyPoolDeployer, OwnableExternal, IPartyPlanner {
         uint256 deadline
     ) external onlyOwner returns (IPartyPool pool, uint256 lpAmount) {
         // Compute kappa from slippage params using LMSR helper (kappa depends only on n, f and s)
-        int128 computedKappa = LMSRStabilized.computeKappaFromSlippage(tokens_.length, tradeFrac_, targetSlippage_);
+        int128 computedKappa = LMSRKernel.computeKappaFromSlippage(tokens_.length, tradeFrac_, targetSlippage_);
 
         // Delegate to the kappa-based newPool variant
         return newPool(

@@ -128,10 +128,10 @@ fuzzing complements `forge test`'s concrete fuzzing for rare-input triggers.
 
 ```sh
 pip install halmos                   # one-time
-halmos --contract LMSRStabilized --function applySwap
+halmos --contract LMSRKernel --function applySwap
 ```
 
-Scope: `LMSRStabilized.applySwap`, `swapAmountsForMint`, `swapAmountsForBurn`. Not the full
+Scope: `LMSRKernel.applySwap`, `swapAmountsForMint`, `swapAmountsForBurn`. Not the full
 pool — Halmos does not handle reentrancy / external calls well.
 
 ## O.8 — Differential review (documented)

@@ -33,7 +33,7 @@ import {Funding} from "../src/Funding.sol";
 import {IPartyInfo} from "../src/IPartyInfo.sol";
 import {IPartyPlanner} from "../src/IPartyPlanner.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 
 import {Deploy} from "./Deploy.sol";
 import {TestERC20} from "./TestHelpers.sol";
@@ -160,7 +160,7 @@ contract ChecklistSectionC is Test {
         tokens[1] = IERC20(address(token1));
         tokens[2] = IERC20(address(token2));
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(
             3,
             ABDKMath64x64.divu(100, 10_000),
             ABDKMath64x64.divu(10, 10_000)
@@ -276,7 +276,7 @@ contract ChecklistSectionC is Test {
         tokens[0] = IERC20(address(hookToken));
         tokens[1] = IERC20(address(plain));
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(
             2,
             ABDKMath64x64.divu(100, 10_000),
             ABDKMath64x64.divu(10, 10_000)

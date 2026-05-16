@@ -15,7 +15,7 @@ import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20
 import {Funding} from "../src/Funding.sol";
 import {IPartyInfo} from "../src/IPartyInfo.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {Deploy} from "./Deploy.sol";
 import {TestERC20Native} from "./NativeTest.t.sol";
 import {WETH9} from "./WETH9.sol";
@@ -97,7 +97,7 @@ contract NativeTest is Test {
         // Deploy pool with a small fee (0.1%)
         uint256 feePpm = 1000;
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
         pool = Deploy.newPartyPool("LP", "LP", tokens, kappa, feePpm, feePpm, weth, false, INIT_BAL, 0);
 
         // Mint _tokens to alice and bob for testing

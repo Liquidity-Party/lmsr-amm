@@ -11,7 +11,7 @@ import {ERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.s
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IPartyPlanner} from "../src/IPartyPlanner.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {Deploy} from "./Deploy.sol";
 import {MockERC20} from "./PartyPlanner.t.sol";
 
@@ -93,7 +93,7 @@ contract PartyPlannerTest is Test {
         uint256 initialTokenBCount = planner.poolsByTokenCount(IERC20(address(tokenB)));
 
         // Compute kappa then create pool via kappa overload
-        int128 computedKappa = LMSRStabilized.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
+        int128 computedKappa = LMSRKernel.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
 
         (IPartyPool pool, uint256 lpAmount) = planner.newPool(
             name,
@@ -172,7 +172,7 @@ contract PartyPlannerTest is Test {
         deposits1[0] = INITIAL_DEPOSIT_AMOUNT;
         deposits1[1] = INITIAL_DEPOSIT_AMOUNT;
 
-        int128 kappa1 = LMSRStabilized.computeKappaFromSlippage(tokens1.length, int128((1 << 64) - 1), int128(1 << 62));
+        int128 kappa1 = LMSRKernel.computeKappaFromSlippage(tokens1.length, int128((1 << 64) - 1), int128(1 << 62));
         (IPartyPool pool1,) = planner.newPool(
             "Pool 1", "LP1", tokens1,
             kappa1, 3000, 5000,
@@ -192,7 +192,7 @@ contract PartyPlannerTest is Test {
         deposits2[0] = INITIAL_DEPOSIT_AMOUNT;
         deposits2[1] = INITIAL_DEPOSIT_AMOUNT / 1e12; // Adjust for 6 decimals
 
-        int128 kappa2 = LMSRStabilized.computeKappaFromSlippage(tokens2.length, int128((1 << 64) - 1), int128(1 << 62));
+        int128 kappa2 = LMSRKernel.computeKappaFromSlippage(tokens2.length, int128((1 << 64) - 1), int128(1 << 62));
         (IPartyPool pool2,) = planner.newPool(
             "Pool 2", "LP2", tokens2,
             kappa2, 3000, 5000,
@@ -248,7 +248,7 @@ contract PartyPlannerTest is Test {
         validDeposits[0] = INITIAL_DEPOSIT_AMOUNT;
         validDeposits[1] = INITIAL_DEPOSIT_AMOUNT;
 
-        int128 kappaErr = LMSRStabilized.computeKappaFromSlippage(tokens.length, int128((1 << 64) - 1), int128(1 << 62));
+        int128 kappaErr = LMSRKernel.computeKappaFromSlippage(tokens.length, int128((1 << 64) - 1), int128(1 << 62));
 
         vm.expectRevert("Planner: payer cannot be zero address");
         planner.newPool(
@@ -267,7 +267,7 @@ contract PartyPlannerTest is Test {
 
         // Test deadline exceeded
         // The default timestamp is 1 and 1-0 is 0 which means "ignore deadline," so we need to set a proper timestamp.
-        int128 kappaDeadline = LMSRStabilized.computeKappaFromSlippage(tokens.length, int128((1 << 64) - 1), int128(1 << 62));
+        int128 kappaDeadline = LMSRKernel.computeKappaFromSlippage(tokens.length, int128((1 << 64) - 1), int128(1 << 62));
         vm.warp(1000);
         vm.expectRevert("Planner: deadline exceeded");
         planner.newPool(
@@ -295,7 +295,7 @@ contract PartyPlannerTest is Test {
             deposits[0] = INITIAL_DEPOSIT_AMOUNT;
             deposits[1] = INITIAL_DEPOSIT_AMOUNT;
 
-            int128 kappaLoop = LMSRStabilized.computeKappaFromSlippage(tokens.length, int128((1 << 64) - 1), int128(1 << 62));
+            int128 kappaLoop = LMSRKernel.computeKappaFromSlippage(tokens.length, int128((1 << 64) - 1), int128(1 << 62));
             (IPartyPool pool,) = planner.newPool(
                 string(abi.encodePacked("Pool ", vm.toString(i))),
                 string(abi.encodePacked("LP", vm.toString(i))),

@@ -16,7 +16,7 @@ import {Funding} from "../src/Funding.sol";
 import {IPartyPlanner} from "../src/IPartyPlanner.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
 import {IPartySwapCallback} from "../src/IPartySwapCallback.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {PartySwapCallbackVerifier} from "../src/PartySwapCallbackVerifier.sol";
 import {IPermit2} from "../src/IPermit2.sol";
 import {PartyPoolPermit2Witness} from "../src/PartyPoolPermit2Witness.sol";
@@ -227,7 +227,7 @@ contract GasTest is Test {
             ierc20Tokens[i] = IERC20(tokens[i]);
         }
         // Compute kappa from slippage params and number of _tokens, then construct pool with kappa
-        int128 computedKappa = LMSRStabilized.computeKappaFromSlippage(ierc20Tokens.length, tradeFrac, targetSlippage);
+        int128 computedKappa = LMSRKernel.computeKappaFromSlippage(ierc20Tokens.length, tradeFrac, targetSlippage);
 
         uint256[] memory initialBalances = new uint256[](numTokens);
         for (uint256 i = 0; i < numTokens; i++) {
@@ -504,7 +504,7 @@ contract GasTest is Test {
             tokens[i].approve(address(p2Planner), INIT_BAL);
         }
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(numTokens, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(numTokens, tradeFrac, targetSlippage);
         string memory poolName = string(abi.encodePacked("P2LP", vm.toString(numTokens)));
 
         vm.prank(p2Planner.owner());

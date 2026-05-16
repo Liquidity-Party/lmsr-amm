@@ -3,12 +3,12 @@ pragma solidity =0.8.35;
 
 import "forge-std/console.sol";
 import "forge-std/console2.sol";
-import "../src/LMSRStabilized.sol";
-import "./LMSRStabilizedBase.t.sol";
+import "../src/LMSRKernel.sol";
+import "./LMSRKernelBase.t.sol";
 
-/// @notice Tests for LMSRStabilized swap price coherence and monotone price behavior.
-contract LMSRStabilizedPriceTest is LMSRStabilizedBase {
-    using LMSRStabilized for LMSRStabilized.State;
+/// @notice Tests for LMSRKernel swap price coherence and monotone price behavior.
+contract LMSRKernelPriceTest is LMSRKernelBase {
+    using LMSRKernel for LMSRKernel.State;
     using ABDKMath64x64 for int128;
 
     function testSwapPriceCoherence() public {

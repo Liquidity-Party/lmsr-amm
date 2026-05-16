@@ -8,7 +8,7 @@ import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20
 import {IPartyPlanner} from "../src/IPartyPlanner.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
 import {IPermit2} from "../src/IPermit2.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {PartyConcierge} from "../src/PartyConcierge.sol";
 import {Deploy} from "./Deploy.sol";
 import {TestERC20} from "./TestHelpers.sol";
@@ -92,7 +92,7 @@ contract PartyConciergeTest is Test {
         tokens[1] = IERC20(address(token1));
         tokens[2] = IERC20(address(token2));
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(
             3,
             ABDKMath64x64.divu(100, 10_000),
             ABDKMath64x64.divu(10,  10_000)
@@ -465,7 +465,7 @@ contract PartyConciergeTest is Test {
         toks[1] = IERC20(address(tokA));
         toks[2] = IERC20(address(tokB));
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(
             3,
             ABDKMath64x64.divu(100, 10_000),
             ABDKMath64x64.divu(10,  10_000)

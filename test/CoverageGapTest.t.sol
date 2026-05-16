@@ -10,7 +10,7 @@ import {Test} from "../lib/forge-std/src/Test.sol";
 import {Funding} from "../src/Funding.sol";
 import {IOwnable} from "../src/IOwnable.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {PartyPool} from "../src/PartyPool.sol";
 import {Deploy} from "./Deploy.sol";
 import {PartyPoolBase} from "./PartyPoolBase.t.sol";
@@ -187,7 +187,7 @@ contract CoverageGapTest is PartyPoolBase {
         IERC20[] memory tokens = new IERC20[](2);
         tokens[0] = IERC20(address(token0));
         tokens[1] = IERC20(address(token1));
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(2, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(2, tradeFrac, targetSlippage);
         uint256[] memory deposits = new uint256[](2);
         deposits[0] = INIT_BAL;
         deposits[1] = INIT_BAL;

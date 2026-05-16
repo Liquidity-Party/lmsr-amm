@@ -205,7 +205,7 @@ accounts for the bases $\beta_i, \beta_j$.
 
 Let $i, j$ be the input and output asset indices and let $a$ be the
 fee-discounted internal input. The production swap kernel
-(\texttt{LMSRStabilized.swapAmountsForExactInput}) computes the output $y$ via
+(\texttt{LMSRKernel.swapAmountsForExactInput}) computes the output $y$ via
 a two-pass Heun-style midpoint of the Hanson exact-input formula:
 
 \begin{align}
@@ -463,7 +463,7 @@ enforced in source; this is an index, not a statement of intent.
 
 \paragraph{Midpoint-$b$ never overshoots LS-LMSR.}
 The production swap kernel
-(\texttt{LMSRStabilized.swapAmountsForExactInput}) is a two-pass midpoint
+(\texttt{LMSRKernel.swapAmountsForExactInput}) is a two-pass midpoint
 approximation of the path-exact LS-LMSR mapping (\S\ref{sec:lp-safety}).
 The output it pays the swapper is bounded above by the output the
 path-exact LS-LMSR mapping would pay under the same inputs --- the swapper

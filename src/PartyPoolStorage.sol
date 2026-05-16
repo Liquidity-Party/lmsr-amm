@@ -3,7 +3,7 @@ pragma solidity =0.8.35;
 
 import {ABDKMath64x64} from "../lib/abdk-libraries-solidity/ABDKMath64x64.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-import {LMSRStabilized} from "./LMSRStabilized.sol";
+import {LMSRKernel} from "./LMSRKernel.sol";
 
 /// @dev Mirror of PartyPool's sequential storage layout. Field order MUST match the C3-linearized
 ///      inheritance order: OwnableInternal → ERC20Internal → PartyPoolBase → PartyPool.
@@ -27,7 +27,7 @@ struct PoolState {
     bytes32 _nonce;
     bool _killed;
     bool _initialized;                                   // packed into slot 8 alongside _killed
-    LMSRStabilized.State _lmsr;                          // slots 9–10
+    LMSRKernel.State _lmsr;                          // slots 9–10
     IERC20[] _tokens;
     uint256[] _protocolFeesOwed;
     mapping(IERC20 => uint256) _tokenAddressToIndexPlusOne;

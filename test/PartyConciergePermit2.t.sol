@@ -10,7 +10,7 @@ import {IPartyInfo} from "../src/IPartyInfo.sol";
 import {IPartyPlanner} from "../src/IPartyPlanner.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
 import {IPermit2} from "../src/IPermit2.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {NativeWrapper} from "../src/NativeWrapper.sol";
 import {PartyConcierge} from "../src/PartyConcierge.sol";
 import {PartyConciergePermit2Witness} from "../src/PartyConciergePermit2Witness.sol";
@@ -92,7 +92,7 @@ contract PartyConciergePermit2Test is Test {
         deposits[0] = wethDep;
         deposits[1] = usdcDep;
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(
             2,
             ABDKMath64x64.divu(1, 100),
             ABDKMath64x64.divu(1, 10_000)
@@ -165,7 +165,7 @@ contract PartyConciergePermit2Test is Test {
         deposits[0] = wethDep;
         deposits[1] = usdcDep;
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(
             2,
             ABDKMath64x64.divu(1, 100),
             ABDKMath64x64.divu(1, 10_000)

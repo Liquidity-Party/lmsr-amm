@@ -171,7 +171,7 @@ range of imbalances achievable in production for any reasonable κ.
   grid (N ∈ {2,5,10,50}, κ ∈ {0.005…2.0}, a/q ∈ {10⁻⁴…10⁻¹}) plus 3-point
   asymmetric grid. Tolerance: 10⁻¹⁰ absolute, well below 1 wei in Q64.64.
 
-- **Midpoint cost-preservation** — `test/LMSRStabilizedCostParity.t.sol`:
+- **Midpoint cost-preservation** — `test/LMSRKernelCostParity.t.sol`:
   verifies the kernel's pass-2 Hanson at `b_mid` preserves inventory cost
   evaluated at that same `b_mid`, to 10⁻⁹ relative tolerance. Covers
   κ ∈ {0.05, 0.2, 0.5, 1.0, 2.0, 5.0} on symmetric and asymmetric pools,
@@ -256,7 +256,7 @@ conservative for kernel safety; precision is fine well past `R_q = 10⁵`.
   simulation (`security/sweep_lmsr_leak.py`).
 
 - **BalancedPair fast-path has been removed from the production codebase**. The
-  `LMSRStabilizedBalancedPair` / `PartyPoolBalancedPair` sources are preserved
+  `LMSRKernelBalancedPair` / `PartyPoolBalancedPair` sources are preserved
   under `doc/reference/` as v2 design reference only; nothing under `src/`
   references them.
 
@@ -270,7 +270,7 @@ conservative for kernel safety; precision is fine well past `R_q = 10⁵`.
 
 ```
 forge test --match-contract ImbalancePrecisionSweep -vv     # Section 3 data
-forge test --match-contract LMSRStabilizedCostParity        # Section 4, midpoint cost preservation
+forge test --match-contract LMSRKernelCostParity        # Section 4, midpoint cost preservation
 forge test --match-contract MidpointBSwapGas                # Section 4, LP-safety
 forge test --match-contract ImbalancedPool                  # Section 4, end-to-end
 ```

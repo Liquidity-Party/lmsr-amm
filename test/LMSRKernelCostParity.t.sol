@@ -2,7 +2,7 @@
 pragma solidity =0.8.35;
 
 import "forge-std/Test.sol";
-import "../src/LMSRStabilized.sol";
+import "../src/LMSRKernel.sol";
 import "../lib/abdk-libraries-solidity/ABDKMath64x64.sol";
 
 /// @notice Regression test for midpoint-b cost-preservation under inventory convention.
@@ -19,7 +19,7 @@ import "../lib/abdk-libraries-solidity/ABDKMath64x64.sol";
 /// and verifies the equality to a tight floating-point tolerance. A failure
 /// would indicate either the cost function or the midpoint-b kernel drifted
 /// from the inventory convention.
-contract LMSRStabilizedCostParityTest is Test {
+contract LMSRKernelCostParityTest is Test {
     using ABDKMath64x64 for int128;
 
     int128 internal constant ONE = 0x10000000000000000;
@@ -74,7 +74,7 @@ contract LMSRStabilizedCostParityTest is Test {
 
         // Execute the production swap
         (int128 amountIn, int128 amountOut) =
-            LMSRStabilized.swapAmountsForExactInput(kappa, q, i, j, a);
+            LMSRKernel.swapAmountsForExactInput(kappa, q, i, j, a);
         assertGt(amountIn,  int128(0), "amountIn > 0");
         assertGt(amountOut, int128(0), "amountOut > 0");
 

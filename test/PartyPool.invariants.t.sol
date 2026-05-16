@@ -13,7 +13,7 @@ import {ABDKMath64x64} from "../lib/abdk-libraries-solidity/ABDKMath64x64.sol";
 import {Funding} from "../src/Funding.sol";
 import {IPartyInfo} from "../src/IPartyInfo.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {Deploy} from "./Deploy.sol";
 import {TestERC20} from "./TestHelpers.sol";
 
@@ -677,7 +677,7 @@ contract PartyPoolInvariantsTest is StdInvariant, Test {
         for (uint256 i = 0; i < n; i++) ierc20s[i] = IERC20(address(tokens[i]));
 
         // ── Pool ─────────────────────────────────────────────────────────────
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(
             n,
             ABDKMath64x64.divu(100, 10_000),   // tradeFrac  = 1%
             ABDKMath64x64.divu(10,  10_000)    // targetSlippage = 0.1%
@@ -895,7 +895,7 @@ contract PartyPoolInvariantsTest is StdInvariant, Test {
     function invariant_I11_lmsrKernelIntegrity() public view {
         if (pool.totalSupply() == 0) return;
 
-        LMSRStabilized.State memory lmsr = pool.LMSR();
+        LMSRKernel.State memory lmsr = pool.LMSR();
 
         assertTrue(lmsr.kappa > 0, "I-11: kappa must be > 0");
 

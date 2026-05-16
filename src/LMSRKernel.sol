@@ -9,7 +9,7 @@ import {ABDKMath64x64} from "../lib/abdk-libraries-solidity/ABDKMath64x64.sol";
 // fixed-point multiply via ABDK. The "loss-then-amplify" failure mode does not apply.
 // slither-disable-start divide-before-multiply
 /// @notice Numerically stable library for a Logarithmic Market Scoring Rule based AMM. See docs/whitepaper.md
-library LMSRStabilized {
+library LMSRKernel {
     using ABDKMath64x64 for int128;
 
     struct State {

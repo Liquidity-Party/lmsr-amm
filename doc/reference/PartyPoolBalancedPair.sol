@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity =0.8.35;
 
-import {LMSRStabilizedBalancedPair} from "./LMSRStabilizedBalancedPair.sol";
+import {LMSRKernelBalancedPair} from "./LMSRKernelBalancedPair.sol";
 import {PartyPool} from "../../src/PartyPool.sol";
 
 /// @dev REFERENCE-ONLY — preserved outside `src/` to document the BalancedPair fast-path
@@ -15,7 +15,7 @@ contract PartyPoolBalancedPair is PartyPool {
     // slither-disable-next-line unused-return
     function _swapAmountsForExactInput(uint256 i, uint256 j, int128 a) internal virtual view
     returns (int128 amountIn, int128 amountOut) {
-        return LMSRStabilizedBalancedPair.swapAmountsForExactInput(_lmsr, i, j, a);
+        return LMSRKernelBalancedPair.swapAmountsForExactInput(_lmsr, i, j, a);
     }
 
     /// @notice Marker for off-chain quote helpers (e.g. PartyInfo) to detect that

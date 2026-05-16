@@ -7,7 +7,7 @@ import {Test} from "../lib/forge-std/src/Test.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Funding} from "../src/Funding.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {Deploy} from "./Deploy.sol";
 import {PartyPoolBase} from "./PartyPoolBase.t.sol";
 import {WETH9} from "./WETH9.sol";
@@ -95,7 +95,7 @@ contract Checklist_J_DoS is PartyPoolBase {
         tokens[0] = IERC20(address(a));
         tokens[1] = IERC20(address(weth));
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
         IPartyPool nativePool = Deploy.newPartyPool(
             "LPN", "LPN", tokens, kappa, 1000, 1000, weth, false, 1_000_000, 0
         );
@@ -123,7 +123,7 @@ contract Checklist_J_DoS is PartyPoolBase {
         tokens[0] = IERC20(address(a));
         tokens[1] = IERC20(address(weth));
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
         IPartyPool localPool = Deploy.newPartyPool(
             "LPB", "LPB", tokens, kappa, 1000, 1000, weth, false, 1_000_000, 0
         );

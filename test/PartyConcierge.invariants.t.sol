@@ -13,7 +13,7 @@ import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20
 import {IPartyPlanner} from "../src/IPartyPlanner.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
 import {IPermit2} from "../src/IPermit2.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {PartyConcierge} from "../src/PartyConcierge.sol";
 import {Deploy} from "./Deploy.sol";
 import {TestERC20} from "./TestHelpers.sol";
@@ -278,7 +278,7 @@ contract PartyConciergeInvariantsTest is StdInvariant, Test {
         IERC20[] memory ierc20s = new IERC20[](n);
         for (uint256 i = 0; i < n; i++) ierc20s[i] = IERC20(address(tokens[i]));
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(
             n,
             ABDKMath64x64.divu(100, 10_000),
             ABDKMath64x64.divu(10,  10_000)

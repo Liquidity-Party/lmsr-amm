@@ -11,7 +11,7 @@ Rows that close with a regression test (G.2, G.9) point at the test file instead
 `PartyPoolDeployer`. The contract has **no proxy in front of it** — the only `delegatecall`s
 that occur during normal operation are the Solidity-emitted DELEGATECALLs to deployed
 linked libraries (`PartyPoolMintImpl`, `PartyPoolExtraImpl`, `PartyPoolPermit2Witness`,
-`Funding`, `LMSRStabilized`). Each of those library
+`Funding`, `LMSRKernel`). Each of those library
 addresses is fixed at link time; none are user-supplied.
 
 The shared storage layout is defined in `src/PartyPoolStorage.sol::PoolState` and asserted
@@ -93,7 +93,7 @@ that any later non-view path reads:
 **The deferred fields** (`_lmsr.kappa`, `_lmsr.qInternal`, `_bases`, `_cachedUintBalances`,
 `_totalSupply`) are populated on the first `initialMint` call. Until that call lands, the
 pool has zero LP supply and the `killable`-gated swap/burn paths cannot execute against
-empty state. `LMSRStabilized.swapAmountsForExactInput` requires `b > 0` (computed from
+empty state. `LMSRKernel.swapAmountsForExactInput` requires `b > 0` (computed from
 `s.qInternal`), and the kernel reverts on empty state.
 
 **Slither suppressions** in `PartyPoolBase` (`uninitialized-state` on `_nonce`, `_fees`,
@@ -122,7 +122,7 @@ slot — no copy semantics apply.
 **OK.** Grep evidence:
 ```
 $ grep -RnE '\bdelete\s' src/
-src/LMSRStabilized.sol:682:        delete s.qInternal;
+src/LMSRKernel.sol:682:        delete s.qInternal;
 src/OwnableInternal.sol:41:        delete _pendingOwner;
 ```
 - `s.qInternal` is `int128[]` (dynamic array of value types). `delete` zeros length and
@@ -186,11 +186,11 @@ $ grep -RnE 'PoolState\s+(memory|storage)' src/
 (every hit is `PoolState storage` — no `PoolState memory` exists)
 ```
 
-The only `memory` struct uses are `LMSRStabilized.State memory` (the read-only
+The only `memory` struct uses are `LMSRKernel.State memory` (the read-only
 view-getter `IPartyPool.LMSR()` and the per-call snapshots inside swap math) — these are
 intentional copies; the kernel never mutates them.
 
-`LMSRStabilized.State storage s` parameters in `applySwap`, `updateForProportionalChange`,
+`LMSRKernel.State storage s` parameters in `applySwap`, `updateForProportionalChange`,
 `deinit`, `_computeB`, `cost`, and `price` are correctly typed `storage` because they
 mutate the underlying slots.
 
@@ -217,10 +217,10 @@ one-line justification. Each block is paired with either a `slither-disable-next
 | --- | --- | --- |
 | `PartyPoolDeployer.sol:88-93` | `create2` deploy of `PartyPool` initcode | Standard CREATE2 wrapper; reverts on zero address. The salt is `bytes32(nonce)`. |
 | `PartyPoolStorage.sol:38` | `s.slot := 0` on `_ps()` return | Pure layout arithmetic — pins the storage handle to the contract's slot 0. |
-| `LMSRStabilized.sol:109,125,551` | `qSlot := add(s.slot, 1)` | Locates `State.qInternal` (offset +1 inside `State`) without an SLOAD of the array length. |
-| `LMSRStabilized.sol:758-764` | `_qLoad(arraySlot, k)` | Reads packed `int128[]` element k bypassing Solidity's bounds-check SLOAD; caller validates `k < n`. |
-| `LMSRStabilized.sol:775-782` | `_qStore(arraySlot, k, val)` | Writes packed `int128[]` element k bypassing bounds check. Same caller-validation contract. The `incorrect-shift` finding is a Slither false positive; documented inline. |
-| `LMSRStabilized.sol:790-798` | `_qToMemory(arraySlot, n)` | Bulk-copies a packed `int128[]` to memory bypassing the array-length SLOAD. Caller passes `n` from an immutable. |
+| `LMSRKernel.sol:109,125,551` | `qSlot := add(s.slot, 1)` | Locates `State.qInternal` (offset +1 inside `State`) without an SLOAD of the array length. |
+| `LMSRKernel.sol:758-764` | `_qLoad(arraySlot, k)` | Reads packed `int128[]` element k bypassing Solidity's bounds-check SLOAD; caller validates `k < n`. |
+| `LMSRKernel.sol:775-782` | `_qStore(arraySlot, k, val)` | Writes packed `int128[]` element k bypassing bounds check. Same caller-validation contract. The `incorrect-shift` finding is a Slither false positive; documented inline. |
+| `LMSRKernel.sol:790-798` | `_qToMemory(arraySlot, n)` | Bulk-copies a packed `int128[]` to memory bypassing the array-length SLOAD. Caller passes `n` from an immutable. |
 | `PartyPoolBase.sol:119-122` | `_arrLoad(arraySlot, i)` | Reads `uint256[]`/`address[]` element i bypassing bounds-check SLOAD. Caller validates index. |
 | `PartyPoolBase.sol:129-132` | `_arrStore(arraySlot, i, val)` | Mirror of `_arrLoad` for writes. |
 | `PartyPoolBase.sol:140,145,150,155,160,165,170` | `s := <var>.slot` | Pure layout arithmetic — resolves the base slot of a storage array once so the assembly helpers can iterate. |

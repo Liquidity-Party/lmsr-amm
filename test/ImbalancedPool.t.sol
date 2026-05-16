@@ -10,7 +10,7 @@ import {IPartyInfo} from "../src/IPartyInfo.sol";
 import {IPartyPlanner} from "../src/IPartyPlanner.sol";
 import {IPartyPlanner} from "../src/IPartyPlanner.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {NativeWrapper} from "../src/NativeWrapper.sol";
 import {NativeWrapper} from "../src/NativeWrapper.sol";
 import {Deploy} from "./Deploy.sol";
@@ -69,7 +69,7 @@ contract ImbalancedPoolTest is Test {
         // Use moderate kappa and fees
         int128 tradeFrac = ABDKMath64x64.divu(100, 10_000); // 0.01
         int128 targetSlippage = ABDKMath64x64.divu(10, 10_000); // 0.001
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
 
         uint256 swapFeePpm = 0;
         uint256 flashFeePpm = 0;

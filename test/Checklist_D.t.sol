@@ -18,7 +18,7 @@ import {Test} from "../lib/forge-std/src/Test.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IPartyPlanner} from "../src/IPartyPlanner.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {PartyPool} from "../src/PartyPool.sol";
 import {Deploy} from "./Deploy.sol";
 import {TestERC20} from "./TestHelpers.sol";
@@ -78,7 +78,7 @@ contract ChecklistSectionDTest is Test {
         t0.transfer(predictedPool, donation);
         assertEq(t0.balanceOf(predictedPool), donation, "precondition: donation landed");
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(
             tokens.length,
             ABDKMath64x64.divu(100, 10_000),
             ABDKMath64x64.divu(10, 10_000)
@@ -142,7 +142,7 @@ contract ChecklistSectionDTest is Test {
         t0.approve(address(planner), initBal);
         t1.approve(address(planner), initBal);
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(
             tokens.length,
             ABDKMath64x64.divu(100, 10_000),
             ABDKMath64x64.divu(10, 10_000)

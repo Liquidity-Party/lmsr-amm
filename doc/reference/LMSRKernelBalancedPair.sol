@@ -2,7 +2,7 @@
 pragma solidity =0.8.35;
 
 import {ABDKMath64x64} from "../../lib/abdk-libraries-solidity/ABDKMath64x64.sol";
-import {LMSRStabilized} from "../../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../../src/LMSRKernel.sol";
 
 // Slither's `divide-before-multiply` detector targets uint integer truncation. Every
 // arithmetic value in this approximation kernel is int128 Q64.64 fixed-point.
@@ -11,7 +11,7 @@ import {LMSRStabilized} from "../../src/LMSRStabilized.sol";
 /// @dev REFERENCE-ONLY — preserved outside `src/` to document the BalancedPair fast-path idea
 ///      for a possible v2. Not compiled into production builds; no pool deployed by the
 ///      current factory reaches this library. Pairs with `doc/reference/PartyPoolBalancedPair.sol`.
-library LMSRStabilizedBalancedPair {
+library LMSRKernelBalancedPair {
     using ABDKMath64x64 for int128;
 
     // Precomputed Q64.64 representation of 1.0 (1 << 64).
@@ -34,13 +34,13 @@ library LMSRStabilizedBalancedPair {
     /// - The goal is to keep relative error well below 0.001% in the intended small-u, near-parity regime,
     ///   while substantially reducing gas in the common fast path.
     // Fast-path returns only `amountOut`; `amountIn = a` is set explicitly. Each
-    // fallback `return LMSRStabilized.swapAmountsForExactInput(...)` forwards the
+    // fallback `return LMSRKernel.swapAmountsForExactInput(...)` forwards the
     // named-return tuple via Solidity's tuple-return semantics, but slither's
     // unused-return heuristic flags every such site. The block disable below covers
     // all internal fallback returns within both library overloads.
     // slither-disable-start unused-return
     function swapAmountsForExactInput(
-        LMSRStabilized.State storage s,
+        LMSRKernel.State storage s,
         uint256 i,
         uint256 j,
         int128 a
@@ -49,14 +49,14 @@ library LMSRStabilizedBalancedPair {
         require(i < nAssets && j < nAssets, "invalid index");
 
         if (nAssets != 2) {
-            return LMSRStabilized.swapAmountsForExactInput(s, i, j, a);
+            return LMSRKernel.swapAmountsForExactInput(s, i, j, a);
         }
 
-        int128 b = LMSRStabilized._computeB(s);
+        int128 b = LMSRKernel._computeB(s);
         int128 invB = ABDKMath64x64.div(ONE, b);
 
         // Small-signal delta = (q_j - q_i) / b (matches r0 = exp((q_j - q_i)/b) in
-        // LMSRStabilized.swapAmountsForExactInput; used to approximate r0 ≈ 1 + delta).
+        // LMSRKernel.swapAmountsForExactInput; used to approximate r0 ≈ 1 + delta).
         int128 delta = s.qInternal[j].sub(s.qInternal[i]).mul(invB);
 
         int128 absDelta = delta >= int128(0) ? delta : delta.neg();
@@ -65,21 +65,21 @@ library LMSRStabilizedBalancedPair {
         int128 DELTA_MAX = ABDKMath64x64.divu(1, 100); // 0.01
         if (absDelta > DELTA_MAX) {
             // Not balanced within 1% -> use exact routine
-            return LMSRStabilized.swapAmountsForExactInput(s, i, j, a);
+            return LMSRKernel.swapAmountsForExactInput(s, i, j, a);
         }
 
         // Scaled input u = a / b (Q64.64). For polynomial approximation we require moderate u.
         int128 u = a.mul(invB);
         if (u <= int128(0)) {
             // Non-positive input -> behave like exact implementation (will revert if invalid)
-            return LMSRStabilized.swapAmountsForExactInput(s, i, j, a);
+            return LMSRKernel.swapAmountsForExactInput(s, i, j, a);
         }
 
         // Restrict to a conservative polynomial radius for accuracy; fallback otherwise.
         // We choose u <= 0.5 (0.5 in Q64.64) as safe for cubic approximation in typical parameters.
         int128 U_MAX = ABDKMath64x64.divu(1, 2); // 0.5
         if (u > U_MAX) {
-            return LMSRStabilized.swapAmountsForExactInput(s, i, j, a);
+            return LMSRKernel.swapAmountsForExactInput(s, i, j, a);
         }
 
         // Now compute a two-tier approximation using Horner-style evaluation to reduce mul/divs.
@@ -108,21 +108,21 @@ library LMSRStabilizedBalancedPair {
             lnApprox = X.sub(X2.div(ABDKMath64x64.fromUInt(2))).add(X3.div(ABDKMath64x64.fromUInt(3)));
         } else {
             // u beyond allowed range - fallback
-            return LMSRStabilized.swapAmountsForExactInput(s, i, j, a);
+            return LMSRKernel.swapAmountsForExactInput(s, i, j, a);
         }
 
         int128 approxOut = b.mul(lnApprox);
 
         // Safety sanity: approximation must be > 0
         if (approxOut <= int128(0)) {
-            return LMSRStabilized.swapAmountsForExactInput(s, i, j, a);
+            return LMSRKernel.swapAmountsForExactInput(s, i, j, a);
         }
 
         // Cap to available j balance: if approximated output exceeds q_j, it's likely approximation break;
         // fall back to the exact solver to handle capping/edge cases.
         int128 qj64 = s.qInternal[j];
         if (approxOut >= qj64) {
-            return LMSRStabilized.swapAmountsForExactInput(s, i, j, a);
+            return LMSRKernel.swapAmountsForExactInput(s, i, j, a);
         }
 
         // Everything looks fine; return approximated amountOut and used amountIn (a)
@@ -131,7 +131,7 @@ library LMSRStabilizedBalancedPair {
 
         // Final guard: ensure output is sensible and not NaN-like (rely on positivity checks above)
         if (amountOut < int128(0)) {
-            return LMSRStabilized.swapAmountsForExactInput(s, i, j, a);
+            return LMSRKernel.swapAmountsForExactInput(s, i, j, a);
         }
 
         return (amountIn, amountOut);
@@ -152,10 +152,10 @@ library LMSRStabilizedBalancedPair {
         require(i < nAssets && j < nAssets, "invalid index");
 
         if (nAssets != 2) {
-            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a);
+            return LMSRKernel.swapAmountsForExactInput(kappa, qInternal, i, j, a);
         }
 
-        int128 sizeMetric = LMSRStabilized._computeSizeMetric(qInternal);
+        int128 sizeMetric = LMSRKernel._computeSizeMetric(qInternal);
         require(sizeMetric > int128(0), "uninitialized");
         int128 b = kappa.mul(sizeMetric);
         int128 invB = ABDKMath64x64.div(ONE, b);
@@ -166,17 +166,17 @@ library LMSRStabilizedBalancedPair {
 
         int128 DELTA_MAX = ABDKMath64x64.divu(1, 100);
         if (absDelta > DELTA_MAX) {
-            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a);
+            return LMSRKernel.swapAmountsForExactInput(kappa, qInternal, i, j, a);
         }
 
         int128 u = a.mul(invB);
         if (u <= int128(0)) {
-            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a);
+            return LMSRKernel.swapAmountsForExactInput(kappa, qInternal, i, j, a);
         }
 
         int128 U_MAX = ABDKMath64x64.divu(1, 2);
         if (u > U_MAX) {
-            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a);
+            return LMSRKernel.swapAmountsForExactInput(kappa, qInternal, i, j, a);
         }
 
         int128 U_TIER1 = ABDKMath64x64.divu(1, 10);
@@ -193,25 +193,25 @@ library LMSRStabilizedBalancedPair {
             int128 X3 = X2.mul(X);
             lnApprox = X.sub(X2.div(ABDKMath64x64.fromUInt(2))).add(X3.div(ABDKMath64x64.fromUInt(3)));
         } else {
-            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a);
+            return LMSRKernel.swapAmountsForExactInput(kappa, qInternal, i, j, a);
         }
 
         int128 approxOut = b.mul(lnApprox);
 
         if (approxOut <= int128(0)) {
-            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a);
+            return LMSRKernel.swapAmountsForExactInput(kappa, qInternal, i, j, a);
         }
 
         int128 qj64 = qInternal[j];
         if (approxOut >= qj64) {
-            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a);
+            return LMSRKernel.swapAmountsForExactInput(kappa, qInternal, i, j, a);
         }
 
         amountIn = a;
         amountOut = approxOut;
 
         if (amountOut < int128(0)) {
-            return LMSRStabilized.swapAmountsForExactInput(kappa, qInternal, i, j, a);
+            return LMSRKernel.swapAmountsForExactInput(kappa, qInternal, i, j, a);
         }
 
         return (amountIn, amountOut);

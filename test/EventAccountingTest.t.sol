@@ -6,7 +6,7 @@ import {Vm} from "../lib/forge-std/src/Vm.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Funding} from "../src/Funding.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {NativeWrapper} from "../src/NativeWrapper.sol";
 import {Deploy} from "./Deploy.sol";
 import {PartyPoolBase} from "./PartyPoolBase.t.sol";
@@ -58,7 +58,7 @@ contract EventAccountingTest is PartyPoolBase {
         deps[1] = INIT_BAL;
         deps[2] = INIT_BAL;
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(3, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(3, tradeFrac, targetSlippage);
         (poolZeroFee,) = Deploy.newPartyPoolWithDeposits(
             "LP0", "LP0", tokens, kappa, 0, 0, false, deps, 0
         );

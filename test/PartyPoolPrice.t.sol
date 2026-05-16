@@ -6,7 +6,7 @@ import {ABDKMath64x64} from "../lib/abdk-libraries-solidity/ABDKMath64x64.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {Funding} from "../src/Funding.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {Deploy} from "./Deploy.sol";
 import {PartyPoolBase} from "./PartyPoolBase.t.sol";
 
@@ -23,10 +23,10 @@ contract PartyPoolPriceTest is PartyPoolBase {
 
         uint256 feePpm = 1000;
 
-        int128 kappaDefault = LMSRStabilized.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
+        int128 kappaDefault = LMSRKernel.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
         (IPartyPool poolDefault, uint256 lpDefault) = Deploy.newPartyPool2("LP_DEFAULT", "LP_DEFAULT", tokens, kappaDefault, feePpm, feePpm, false, INIT_BAL, 0);
 
-        int128 kappaCustom = LMSRStabilized.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
+        int128 kappaCustom = LMSRKernel.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
         uint256 customLpAmount = lpDefault * 5;
         (IPartyPool poolCustom, uint256 lpCustom) = Deploy.newPartyPool2("LP_CUSTOM", "LP_CUSTOM", tokens, kappaCustom, feePpm, feePpm, false, INIT_BAL, customLpAmount);
 
@@ -66,11 +66,11 @@ contract PartyPoolPriceTest is PartyPoolBase {
 
         uint256 feePpm = 1000;
 
-        int128 kappaDefault2 = LMSRStabilized.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
+        int128 kappaDefault2 = LMSRKernel.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
         (IPartyPool poolDefault, uint256 lpDefault) = Deploy.newPartyPool2("LP_DEFAULT", "LP_DEFAULT", tokens, kappaDefault2, feePpm, feePpm, false, INIT_BAL, 0);
         uint256 scaleFactor = 3;
         uint256 customLpAmount = lpDefault * scaleFactor;
-        int128 kappaCustom2 = LMSRStabilized.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
+        int128 kappaCustom2 = LMSRKernel.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
         (IPartyPool poolCustom,) = Deploy.newPartyPool2("LP_CUSTOM", "LP_CUSTOM", tokens, kappaCustom2, feePpm, feePpm, false, INIT_BAL, customLpAmount);
 
         assertEq(poolDefault.totalSupply(), lpDefault, "Default pool should have default LP supply");
@@ -167,7 +167,7 @@ contract PartyPoolPriceTest is PartyPoolBase {
         tokens[2] = IERC20(address(token2));
 
         uint256 feePpm = 1000;
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
 
         uint256[] memory deposits = new uint256[](3);
         deposits[0] = INIT_BAL * 3;
@@ -198,7 +198,7 @@ contract PartyPoolPriceTest is PartyPoolBase {
         tokens[2] = IERC20(address(token2));
 
         uint256 feePpm = 1000;
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(tokens.length, tradeFrac, targetSlippage);
 
         uint256[] memory deposits = new uint256[](3);
         deposits[0] = INIT_BAL * 3;

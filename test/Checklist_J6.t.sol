@@ -15,7 +15,7 @@ import {Test} from "../lib/forge-std/src/Test.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IPartyPlanner} from "../src/IPartyPlanner.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {PartyPool} from "../src/PartyPool.sol";
 import {Deploy} from "./Deploy.sol";
 import {TestERC20} from "./TestHelpers.sol";
@@ -24,7 +24,7 @@ contract ChecklistJ6Test is Test {
     using ABDKMath64x64 for int128;
 
     function _kappa(uint256 n) internal pure returns (int128) {
-        return LMSRStabilized.computeKappaFromSlippage(
+        return LMSRKernel.computeKappaFromSlippage(
             n,
             ABDKMath64x64.divu(100, 10_000),
             ABDKMath64x64.divu(10, 10_000)

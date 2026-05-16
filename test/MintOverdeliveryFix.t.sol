@@ -8,7 +8,7 @@ import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20
 import {Funding} from "../src/Funding.sol";
 import {IPartyInfo} from "../src/IPartyInfo.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {Deploy} from "./Deploy.sol";
 import {TestERC20} from "./TestHelpers.sol";
 
@@ -43,7 +43,7 @@ contract MintOverdeliveryFixTest is Test {
         deposits[1] = INIT_BAL;
         deposits[2] = INIT_BAL;
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(
             3,
             ABDKMath64x64.divu(100, 10_000),
             ABDKMath64x64.divu(10, 10_000)

@@ -9,7 +9,7 @@ import {ReentrancyGuard} from "../lib/openzeppelin-contracts/contracts/utils/Ree
 import {ERC20Internal} from "./ERC20Internal.sol";
 import {Funding} from "./Funding.sol";
 import {IPermit2} from "./IPermit2.sol";
-import {LMSRStabilized} from "./LMSRStabilized.sol";
+import {LMSRKernel} from "./LMSRKernel.sol";
 import {NativeWrapper} from "./NativeWrapper.sol";
 import {OwnableInternal} from "./OwnableInternal.sol";
 import {PartyPoolHelpers} from "./PartyPoolHelpers.sol";
@@ -18,7 +18,7 @@ import {PartyPoolHelpers} from "./PartyPoolHelpers.sol";
 /// No external/public functions here.
 abstract contract PartyPoolBase is OwnableInternal, ERC20Internal, ReentrancyGuard, PartyPoolHelpers {
     using ABDKMath64x64 for int128;
-    using LMSRStabilized for LMSRStabilized.State;
+    using LMSRKernel for LMSRKernel.State;
     using SafeERC20 for IERC20;
 
     // Set once in PartyPool's constructor and read by both this contract and the
@@ -70,7 +70,7 @@ abstract contract PartyPoolBase is OwnableInternal, ERC20Internal, ReentrancyGua
     bool internal _initialized;
 
     // LMSR internal state
-    LMSRStabilized.State internal _lmsr;
+    LMSRKernel.State internal _lmsr;
 
     /// @notice Token addresses comprising the pool. Effectively immutable after construction.
     /// @dev _tokens[i] corresponds to the i-th asset and maps to index i in the internal LMSR arrays.

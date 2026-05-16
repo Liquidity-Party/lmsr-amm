@@ -2,14 +2,14 @@
 pragma solidity =0.8.35;
 
 import "forge-std/Test.sol";
-import "../src/LMSRStabilized.sol";
+import "../src/LMSRKernel.sol";
 
-/// @notice Abstract base for LMSRStabilized tests: shared state, setUp, and helper functions.
-abstract contract LMSRStabilizedBase is Test {
-    using LMSRStabilized for LMSRStabilized.State;
+/// @notice Abstract base for LMSRKernel tests: shared state, setUp, and helper functions.
+abstract contract LMSRKernelBase is Test {
+    using LMSRKernel for LMSRKernel.State;
     using ABDKMath64x64 for int128;
 
-    LMSRStabilized.State internal s;
+    LMSRKernel.State internal s;
 
     int128 stdTradeSize;
     int128 stdSlippage;

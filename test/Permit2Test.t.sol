@@ -10,7 +10,7 @@ import {IPartyInfo} from "../src/IPartyInfo.sol";
 import {IPartyPlanner} from "../src/IPartyPlanner.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
 import {IPermit2} from "../src/IPermit2.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {NativeWrapper} from "../src/NativeWrapper.sol";
 import {PartyPlanner} from "../src/PartyPlanner.sol";
 import {PartyPoolInitCode} from "../src/PartyPoolDeployer.sol";
@@ -118,7 +118,7 @@ contract Permit2Test is Test {
         uint256[] memory deposits = new uint256[](3);
         deposits[0] = dep0; deposits[1] = dep1; deposits[2] = dep2;
 
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(
             3,
             ABDKMath64x64.divu(1, 10),
             ABDKMath64x64.divu(1, 10_000)

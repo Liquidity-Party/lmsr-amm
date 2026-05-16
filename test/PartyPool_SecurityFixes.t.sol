@@ -10,7 +10,7 @@ import {IOwnable} from "../src/IOwnable.sol";
 import {IPartyPlanner} from "../src/IPartyPlanner.sol";
 import {IPartyInfo} from "../src/IPartyInfo.sol";
 import {IPartyPool} from "../src/IPartyPool.sol";
-import {LMSRStabilized} from "../src/LMSRStabilized.sol";
+import {LMSRKernel} from "../src/LMSRKernel.sol";
 import {NativeWrapper} from "../src/NativeWrapper.sol";
 import {Deploy} from "./Deploy.sol";
 import {MockERC20} from "./MockERC20.sol";
@@ -85,7 +85,7 @@ contract DuplicateTokenGuardTest is Test {
 
         int128 tradeFrac = ABDKMath64x64.divu(100, 10_000);
         int128 targetSlippage = ABDKMath64x64.divu(10, 10_000);
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(3, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(3, tradeFrac, targetSlippage);
 
         // CREATE-time revert reasons are not preserved through the planner's deployer
         // wrapper, so we accept any revert. The require lives in PartyPoolExtraImpl.init
@@ -123,7 +123,7 @@ contract DuplicateTokenGuardTest is Test {
 
         int128 tradeFrac = ABDKMath64x64.divu(100, 10_000);
         int128 targetSlippage = ABDKMath64x64.divu(10, 10_000);
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(3, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(3, tradeFrac, targetSlippage);
 
         vm.expectRevert();
         planner.newPool(
@@ -161,7 +161,7 @@ contract DuplicateTokenGuardTest is Test {
 
         int128 tradeFrac = ABDKMath64x64.divu(100, 10_000);
         int128 targetSlippage = ABDKMath64x64.divu(10, 10_000);
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(3, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(3, tradeFrac, targetSlippage);
 
         (IPartyPool p, ) = planner.newPool(
             "OK", "OK",
@@ -264,7 +264,7 @@ contract EthRefundCallTest is Test {
 
         int128 tradeFrac = ABDKMath64x64.divu(100, 10_000);
         int128 targetSlippage = ABDKMath64x64.divu(10, 10_000);
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(3, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(3, tradeFrac, targetSlippage);
         pool = Deploy.newPartyPool("LP", "LP", tokens, kappa, 1000, 1000, weth, false, INIT_BAL, 0);
     }
 
@@ -333,7 +333,7 @@ contract ReceiveGateTest is Test {
 
         int128 tradeFrac = ABDKMath64x64.divu(100, 10_000);
         int128 targetSlippage = ABDKMath64x64.divu(10, 10_000);
-        int128 kappa = LMSRStabilized.computeKappaFromSlippage(3, tradeFrac, targetSlippage);
+        int128 kappa = LMSRKernel.computeKappaFromSlippage(3, tradeFrac, targetSlippage);
         pool = Deploy.newPartyPool("LP", "LP", tokens, kappa, 1000, 1000, weth, false, INIT_BAL, 0);
     }
 
@@ -541,7 +541,7 @@ contract M1_SwapMintQInternalSyncTest is Test {
         vm.stopPrank();
 
         // pool.LMSR() returns the full State struct; qInternal is its int128[] field.
-        LMSRStabilized.State memory s = pool.LMSR();
+        LMSRKernel.State memory s = pool.LMSR();
         uint256[] memory cached = pool.balances();
         uint256[] memory bases = info.denominators(pool);
 

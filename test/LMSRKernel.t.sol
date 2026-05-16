@@ -2,12 +2,12 @@
 pragma solidity =0.8.35;
 
 import "forge-std/Test.sol";
-import "../src/LMSRStabilized.sol";
-import "./LMSRStabilizedBase.t.sol";
+import "../src/LMSRKernel.sol";
+import "./LMSRKernelBase.t.sol";
 
-/// @notice Tests for LMSRStabilized initialization, state management, and core swap behavior.
-contract LMSRStabilizedTest is LMSRStabilizedBase {
-    using LMSRStabilized for LMSRStabilized.State;
+/// @notice Tests for LMSRKernel initialization, state management, and core swap behavior.
+contract LMSRKernelTest is LMSRKernelBase {
+    using LMSRKernel for LMSRKernel.State;
     using ABDKMath64x64 for int128;
 
     function testInitBalanced() public {
