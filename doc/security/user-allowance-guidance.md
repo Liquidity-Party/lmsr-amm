@@ -14,6 +14,6 @@ This protocol consumes ERC-20 allowances at two surfaces: the `PartyConcierge` r
 
 ## Why this matters here
 
-`PartyConcierge` and `PartyPool` swap/mint paths take `payer` as an external argument. Authorisation is enforced via `Funding`-selector checks (Permit2 witnesses, ERC-20 allowance, or callback-funding the freshly deployed pool only). Even with these checks correct, the allowance you grant is the upper bound on what *any* successful call can pull — keeping that bound tight is your last line of defence against bugs in router code, in front-end UIs, or in a future upgrade you have not reviewed.
+`PartyConcierge` and `PartyPool` swap/mint paths take `payer` as an external argument. Authorization is enforced via `Funding`-selector checks (Permit2 witnesses, ERC-20 allowance, or callback-funding the freshly deployed pool only). Even with these checks correct, the allowance you grant is the upper bound on what *any* successful call can pull — keeping that bound tight is your last line of defense against bugs in router code, in front-end UIs, or in a future upgrade you have not reviewed.
 
 The asset-authority matrix (`doc/security/asset-authority-matrix.md`) is the per-function audit of these paths; this document is the user-facing complement.

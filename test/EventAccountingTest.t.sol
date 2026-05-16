@@ -679,7 +679,7 @@ contract EventAccountingTest is PartyPoolBase {
         uint256 lpToBurn = lpSupply / 10;
         assertTrue(lpToBurn > 0, "precondition: lpToBurn > 0");
 
-        // address(this) holds LP tokens from pool initialisation
+        // address(this) holds LP tokens from pool initialization
         (uint256 qOut, uint256 qFee) = info.burnSwapAmounts(pool, lpToBurn, 0);
         uint256 qProto = _protoShare(qFee);
         uint256 qLpFee = qFee - qProto;
@@ -725,7 +725,7 @@ contract EventAccountingTest is PartyPoolBase {
         uint256 lpToBurn = poolZeroFee.totalSupply() / 10;
         assertTrue(lpToBurn > 0, "precondition: lpToBurn > 0");
 
-        // address(this) is the LP holder from the zero-fee pool initialisation too
+        // address(this) is the LP holder from the zero-fee pool initialization too
         // First mint LP into zero-fee pool for address(this) via initial deployment
         // In setUp, zero-fee pool was deployed with lpTokens=0, so it uses internal
         // LP_SCALE. We have LP from that initial mint. Use burnSwap directly.

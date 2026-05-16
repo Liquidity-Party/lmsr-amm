@@ -8,7 +8,7 @@ listing process.
 
 `PartyPlanner.newPool` is `onlyOwner` and there are no plans to lift that gate.
 Permissionless pool creation is out of scope for the foreseeable future. This means a
-malicious token can only be introduced by the operator, and the primary defence against
+malicious token can only be introduced by the operator, and the primary defense against
 malicious tokens is operator vetting — not runtime checks in the pool.
 
 The pool's runtime safety nets (`nonReentrant`, deploy-time delta-equality on initial
@@ -92,7 +92,7 @@ Before invoking `PartyPlanner.newPool` with any new token, the operator MUST:
 
 ## 4. Post-list monitoring
 
-Vetting is a snapshot. Operators MUST monitor on-chain for post-list misbehaviour:
+Vetting is a snapshot. Operators MUST monitor on-chain for post-list misbehavior:
 
 - Sudden balance drift (rebasing turned on)
 - Unexpected reverts on transfer (pause/blacklist activated)

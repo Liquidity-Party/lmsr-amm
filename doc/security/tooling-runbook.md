@@ -28,7 +28,7 @@ be triaged).
 **Status: live.** Slither is installed in the dev environment and runs cleanly
 on the current tree. `.github/workflows/ci.yml` has a dedicated `slither` job
 that invokes `crytic/slither-action@v0.4.0` with `fail-on: pedantic` (fails on
-ANY detector trigger, including informational and optimisation). Every
+ANY detector trigger, including informational and optimization). Every
 legitimate false positive is suppressed inline with a `slither-disable-next-line
 <detector>` annotation; any unsuppressed finding is treated as a real issue.
 

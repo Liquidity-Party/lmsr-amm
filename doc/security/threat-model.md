@@ -16,7 +16,7 @@ that a reader landing here cold can navigate to any specific concern in under
 
 ## 1. Trust model and posture
 
-The protocol is a permissioned-deploy, defence-in-depth design:
+The protocol is a permissioned-deploy, defense-in-depth design:
 
 - **Pool creation is permissioned**, indefinitely. `PartyPlanner.newPool` is
   `onlyOwner`; the planner owner ("the operator") is the trust anchor for token
@@ -25,7 +25,7 @@ The protocol is a permissioned-deploy, defence-in-depth design:
   tables and trapped-funds analysis live there. The operator cannot mint LP
   out-of-band, change fees on a live pool, pause/blacklist users, upgrade
   implementation, renounce ownership, or move funds out of a pool directly.
-- **Defence in depth:** runtime guards (`nonReentrant`, `killable`, deploy-time
+- **Defense in depth:** runtime guards (`nonReentrant`, `killable`, deploy-time
   delta-equality, payer-gates, witness-bound Permit2) + operator off-chain
   vetting (`token-validator-spec.md`, `slither-check-erc`) + on-chain
   monitoring + the irreversible `kill()` lever. No single layer is the design;
@@ -34,7 +34,7 @@ The protocol is a permissioned-deploy, defence-in-depth design:
   (`_lmsr.qInternal` / `kappa`); see §L.1, §L.2 in the checklist.
 
 This posture makes the operator's key custody and the validator's discipline
-the load-bearing security properties. See §11 for organisational open
+the load-bearing security properties. See §11 for organizational open
 questions on key custody and audit/bounty cadence.
 
 ---
@@ -121,7 +121,7 @@ paragraph; the row references are the closure.
   state-mutating external on `PartyPool`. Read-only-reentrancy intentionally
   not guarded; documented on `IPartyPool` / `IPartyInfo` (open-items O-5).
   Closure §C.1–C.6.
-- **Token misbehaviour.** FoT / rebasing / hook / phantom-permit / approval-race
+- **Token misbehavior.** FoT / rebasing / hook / phantom-permit / approval-race
   / multi-address-proxy / post-list-governance / flash-mintable. Pre-list
   validator (`bin/validate-token`) gates §D.1–D.7, §D.14; runtime delta-equality
   at `PartyPlanner.sol:~190` catches FoT and in-window rebasing; operator
@@ -134,7 +134,7 @@ paragraph; the row references are the closure.
   domain separator from Permit2. Closure §F.1–F.5.
 - **Storage / inheritance / upgradeability.** Non-upgradeable, no proxy, no
   delegatecall to mutable target, no selfdestruct. Library DELEGATECALL pinned
-  at link time. C3-linearised storage layout enforced by `StorageLayoutTest`
+  at link time. C3-linearized storage layout enforced by `StorageLayoutTest`
   (20 raw-slot tests). Transient-storage Concierge context audited. Closure
   §G.1–G.12; details in `storage-layout-audit.md`.
 - **AMM economics.** JIT-LP and b-sandwich analyses in `economics-audit.md`
@@ -179,7 +179,7 @@ Named invariants enforced on every commit by the Foundry invariant suite
 | I-8  | `killed()` is monotonic — once `true`, never `false`.                                                                                                    | View-only check.                                                                  |
 | I-9  | `_protocolFeesOwed[i]` only decreases via `collectProtocolFees`.                                                                                         | View-only check.                                                                  |
 | I-10 | Total-supply consistency: sum of `_balances` == `totalSupply()`.                                                                                         | View-only check.                                                                  |
-| I-11 | LMSR kernel integrity: `kappa > 0`, `qInternal[i] >= 0`, sum > 0 while initialised.                                                                      | View-only check.                                                                  |
+| I-11 | LMSR kernel integrity: `kappa > 0`, `qInternal[i] >= 0`, sum > 0 while initialized.                                                                      | View-only check.                                                                  |
 | I-12 | LP fee accrual is strictly positive on every real swap (no rounding-to-zero of LP share).                                                                | Inline in handler.                                                                |
 | I-13 | No allowance theft on `mint`.                                                                                                                            | Adversarial handler.                                                              |
 | I-14 | No allowance theft on `swapMint`.                                                                                                                        | Adversarial handler.                                                              |
@@ -232,7 +232,7 @@ Cited from `trusted-deployer-policy.md` §2 unless noted otherwise:
   (`trusted-deployer-policy.md` §4).
 - Two-step ownership transfers; confirm `pendingOwner` before instructing
   acceptance.
-- Key custody — see §11 N.6 / N.7 (organisational, not yet in-tree).
+- Key custody — see §11 N.6 / N.7 (organizational, not yet in-tree).
 
 ### User-side
 
@@ -319,7 +319,7 @@ The signals the operator monitors continuously:
 
 ### 9.5 Postmortem
 
-- Commit a postmortem to `doc/security/` modelled on
+- Commit a postmortem to `doc/security/` modeled on
   `exploit-investigation-2026-05-07.md`: timeline, decoded calldata, root
   cause, code-level fix, regression test, and process change.
 
@@ -354,9 +354,9 @@ The signals the operator monitors continuously:
 
 ---
 
-## 11. Open questions appendix (organisational)
+## 11. Open questions appendix (organizational)
 
-The following are organisational decisions, not code deliverables. Questions
+The following are organizational decisions, not code deliverables. Questions
 were posed during the §N review pass; answers below are recorded in writing
 as the operator's policy of record. Re-visit and update at each major release.
 
@@ -366,7 +366,7 @@ _Question:_ Is there a named team member with explicit responsibility for
 security review, separate from the contract author?
 
 **Answer (2026-05-10): OPEN.** No named lead at this time. Review remains
-author-driven; this is the single highest-leverage organisational gap and is
+author-driven; this is the single highest-leverage organizational gap and is
 the explicit motivation for the paid-external-audit gate at N.10. Until N.10
 is met, the mitigation is process — the structured checklist + matrix +
 threat-model review documented across `doc/security/`.
@@ -384,7 +384,7 @@ same address), and the protocol-fee-recipient address.
 
 _Question:_ Is the planner-owner address (and each live pool owner) a
 multisig requiring two-or-more humans for `kill()`, ownership transfer, and
-fee-recipient changes? Who specifically is authorised to call `kill()`?
+fee-recipient changes? Who specifically is authorized to call `kill()`?
 Single signer or multisig?
 
 **Answer (2026-05-10): single-signer EOA, with a defined migration trigger.**
@@ -400,7 +400,7 @@ is a deliberate trade-off; the rationale and limits:
    CAN / CANNOT inventory and `asset-authority-matrix.md` for the per-cell
    evidence. This fact is what makes the single-signer trade-off
    defensible.
-2. **Rapid-response benefit.** Single-signer `kill()` minimises
+2. **Rapid-response benefit.** Single-signer `kill()` minimizes
    time-to-fire on incident detection. The operator confirmed-and-killed inside the same hour as user
    report. A 2-of-N multisig would have added quorum-coordination latency at
    the worst possible moment.
@@ -429,7 +429,7 @@ with two jobs, both fail-on-any:
   the 363-test unit + integration suite.
 - `slither` — `crytic/slither-action@v0.4.0` with `fail-on: pedantic`. This
   is stricter than the original "no-high-severity" ask: pedantic fails on
-  ANY detector trigger, including informational and optimisation findings.
+  ANY detector trigger, including informational and optimization findings.
   The repo's posture (and the basis for this stricter setting) is that every
   legitimate false positive is suppressed inline with a
   `slither-disable-next-line ...` annotation; any unsuppressed finding is

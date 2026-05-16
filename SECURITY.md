@@ -55,6 +55,6 @@ Out of scope:
 - [`doc/security/checklist.md`](doc/security/checklist.md) — security review
   checklist (14 sections, 84 rows).
 - [`doc/security/asset-authority-matrix.md`](doc/security/asset-authority-matrix.md)
-  — per-asset, per-function authorisation matrix.
+  — per-asset, per-function authorization matrix.
 - [`doc/security/trusted-deployer-policy.md`](doc/security/trusted-deployer-policy.md)
   — operator obligations and token vetting workflow.

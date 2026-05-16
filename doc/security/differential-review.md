@@ -30,11 +30,11 @@ The five sub-sections below set the frame; per-function sections in §3–§5 ci
 
 | Design                 | Kernel                                                 | Pricing primitive                                                                        |
 | ---------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| Liquidity Party        | **LMSR (logarithmic market scoring rule)**, stabilised | Cost function `C(q) = b · ln(Σ exp(q_i / b))` with `b = κ · S(q)` (`LMSRStabilized.sol`) |
+| Liquidity Party        | **LMSR (logarithmic market scoring rule)**, stabilized | Cost function `C(q) = b · ln(Σ exp(q_i / b))` with `b = κ · S(q)` (`LMSRStabilized.sol`) |
 | Uniswap V2             | Constant product                                       | `x · y = k`                                                                              |
 | Uniswap V3             | Concentrated CFMM                                      | Per-tick `x · y = k` with virtual reserves                                               |
 | Curve StableSwap       | Mixed CP/sum invariant                                 | `D` solved by Newton; near-1:1 region                                                    |
-| Curve CryptoSwap       | Generalised xyk + repegging                            | Internal price scale + `D`                                                               |
+| Curve CryptoSwap       | Generalized xyk + repegging                            | Internal price scale + `D`                                                               |
 | Balancer V2 (weighted) | Weighted CFMM                                          | `Π x_i^w_i = k`                                                                          |
 
 **Why LMSR.** LMSR is bounded-loss and cleanly extends to n assets with a single shared liquidity parameter. The convex-cycle non-profitability invariant (`I-5`, `whitepaper-additions.md`) holds by construction. We accept O(n) gas in the asset count for the multi-asset benefit. This is documented; no divergence finding.
@@ -88,7 +88,7 @@ Comparison:
 
 **Divergences from the canonical pattern:**
 
-- **No timelock on admin actions** (Curve has commit/apply delay; we do not). Justification: blast radius of admin-callable actions is bounded — see `admin-powers.md` and the trapped-funds analysis. The reachable harm is `kill()` (DoS, LPs retain burn-exit) and protocol-fee redirect (bounded by uncollected fee accrual; reserves are not reachable from any admin path). Single-signer `kill()` minimises time-to-fire on incident detection (`threat-model.md` §11.N7). Migration to multisig is recorded as triggered at the first material TVL milestone.
+- **No timelock on admin actions** (Curve has commit/apply delay; we do not). Justification: blast radius of admin-callable actions is bounded — see `admin-powers.md` and the trapped-funds analysis. The reachable harm is `kill()` (DoS, LPs retain burn-exit) and protocol-fee redirect (bounded by uncollected fee accrual; reserves are not reachable from any admin path). Single-signer `kill()` minimizes time-to-fire on incident detection (`threat-model.md` §11.N7). Migration to multisig is recorded as triggered at the first material TVL milestone.
 - **Anyone-callable `collectProtocolFees`.** Uniswap V3's `collectProtocol` is owner-only. We made ours permissionless because the recipient is fixed in storage and only `setProtocolFeeAddress` (onlyOwner) can change it. The "divergence" is purely a UX choice — anyone can pay the gas to push fees to the configured recipient.
 
 ### 2.5 Upgrade and lifecycle
@@ -98,7 +98,7 @@ Comparison:
 | Upgradeable proxy?      | No                                                                                                                 | No            | No                     | No (Vault); pool factory immutable               |
 | Selfdestruct reachable? | No (`checklist.md` G.4)                                                                                            | No            | No                     | No                                               |
 | Kill / pause?           | `kill()` one-way per pool, `onlyOwner`; disables every entry **except** `burn` / `burnSwap` and ERC20 LP transfers | None          | Some pools (`kill_me`) | Authorizer-mediated emergency `setPaused` window |
-| Storage compatibility?  | C3-linearised, slot-pinned by `_ps()`, 20 raw-slot tests in `StorageLayoutTest`                                    | Static        | Static                 | Static                                           |
+| Storage compatibility?  | C3-linearized, slot-pinned by `_ps()`, 20 raw-slot tests in `StorageLayoutTest`                                    | Static        | Static                 | Static                                           |
 
 **Divergence: kill semantics.** Our `kill()` permanently disables `swap`/`swapMint`/`mint`/`initialMint`/`flashLoan`/`collectProtocolFees` but leaves `burn`/`burnSwap` callable. This is intentional: LPs always retain exit. Uncollected protocol fees are written off (acceptance documented in `admin-powers.md` §Trapped-funds). Curve's per-pool `kill_me` is the closest analog; Balancer V2's authorizer pause is broader (pauses the whole Vault). The single-signer kill trade-off is justified in `threat-model.md` §11.N7 / §9.
 
@@ -298,7 +298,7 @@ function initialMint(address receiver, uint256 lpTokens)
 
 1. **Called by `PartyPlanner` only.** `initialMint` itself does not pull tokens — it reads `balanceOf(pool, t_i)` directly into `_cachedUintBalances`/`_bases`. The actual `safeTransferFrom(payer, pool, …)` happens in `PartyPlanner.newPool` (`src/PartyPlanner.sol:187`) before `initialMint` runs. **Justification:** delta-equality at `PartyPlanner.sol:203` rejects fee-on-transfer / in-window rebasing; pre-existing donations are accepted as a gift to the first depositor (closes O-6 deployment-griefing — `checklist.md` J.6).
 2. **No `MINIMUM_LIQUIDITY` burn.** UniV2 burns 1000 wei to `address(0)` to prevent the first-deposit-attack share-price inflation. We do not need it: `initialMint` mints exactly `initialLpAmount` (no `totalAssets / totalSupply` price), so donations cannot dilute the first depositor (`checklist.md` D.8). **Justification:** the inflation attack vector does not exist in our mint pricing.
-3. **Idempotent revert if already initialised.** `LMSRStabilized.init` reverts if called twice. UniV2's `_mintMinimumLiquidity` only runs when `totalSupply == 0`. **No real divergence.**
+3. **Idempotent revert if already initialized.** `LMSRStabilized.init` reverts if called twice. UniV2's `_mintMinimumLiquidity` only runs when `totalSupply == 0`. **No real divergence.**
 
 ### 3.7 flashLoan
 
@@ -399,7 +399,7 @@ function transferFrom(address from, address to, uint256 value) public returns (b
 
 1. **No `permit()` on the LP token.** UniV2 and post-2022 Curve LPs implement EIP-2612 `permit`. We delegate all signed flows to Permit2 (which handles LP-token transfers via the same `permitTransferFrom` interface as other ERC20s). **Justification:** Permit2 is the protocol's only signed-flow surface; adding a per-token EIP-2612 `permit` would split the signed surface and increase audit area for marginal UX gain.
 2. **`renounceOwnership` reverts.** Inherited at the contract, not the LP token. Standard ERC20 functions are unaffected.
-3. Inheritance is `ERC20Internal` + `ERC20External` (split for storage discipline; OZ-derived `_spendAllowance` semantics, including `type(uint256).max` infinite-allowance preservation). **No behavioural divergence.**
+3. Inheritance is `ERC20Internal` + `ERC20External` (split for storage discipline; OZ-derived `_spendAllowance` semantics, including `type(uint256).max` infinite-allowance preservation). **No behavioral divergence.**
 
 ---
 
@@ -427,7 +427,7 @@ All three are `onlyOwner` (`:119, :228, :273`).
 **Divergences:**
 
 1. **`onlyOwner` (permissioned creation, indefinitely).** UniV2/V3 and the modern Curve / Balancer factories are permissionless. **Justification:** `trusted-deployer-policy.md` §1. The operator is the trust anchor for token vetting. Re-introducing permissionless creation requires `payer == msg.sender` at minimum. This is the most consequential divergence in the document — and it is the one specifically required by the threat model (`threat-model.md` §1, §2).
-2. **Initial deposit during deploy.** UniV2/V3 separate `createPair`/`createPool` from `mint`/`initialize`; Curve and Balancer also separate. We bundle deploy + first-mint atomically because the LMSR kernel must be initialised with non-zero balances. **Justification:** kernel constraint (`LMSRStabilized.init` requires `q_i > 0`); also closes the first-deposit-attack window (D.8).
+2. **Initial deposit during deploy.** UniV2/V3 separate `createPair`/`createPool` from `mint`/`initialize`; Curve and Balancer also separate. We bundle deploy + first-mint atomically because the LMSR kernel must be initialized with non-zero balances. **Justification:** kernel constraint (`LMSRStabilized.init` requires `q_i > 0`); also closes the first-deposit-attack window (D.8).
 3. **Three overloads.** UniV2 has one; UniV3 has one; Curve factories have many; Balancer factories have one per pool type. **Justification:** historical (variant C is older API kept for compatibility); production use is variant A.
 4. **`payer` parameter for initial deposit.** `onlyOwner` chooses `payer`, then `safeTransferFrom(payer, pool, …)` at `:187`. **Justification:** the planner owner needs to choose between funding from `msg.sender`, a treasury, or a delegated funding contract. The auth chain is `onlyOwner → payer → standard ERC20 allowance`. Documented inline at `PartyPlanner.sol:84-103` with the explicit "self-griefing pattern: pre-granting allowances to deterministic CREATE2 addresses" warning (closes O-3). The `asset-authority-matrix.md` §H.2 cites this as a known surface.
 5. **Delta-equality balance check.** `:203` enforces `balanceAfter - balanceBefore == initialDeposits[i]`. UniV2 / Curve do not run such a check (rebasing tokens are out-of-scope by convention). **Justification:** belt-and-braces against FoT and in-window rebasing (`checklist.md` E.10, J.6). Out-of-window rebasing is caught at runtime by I-1.
@@ -530,7 +530,7 @@ function burn(IPartyPool pool, address recipient, uint256 lpAmount, uint256 dead
 **Divergences:**
 
 1. **Two-step LP transfer.** `safeTransferFrom(user → Concierge, lp)` at `:216`, then `pool.burn(Concierge, recipient, lp, …)` at `:217`. UniV2 router takes the LP via `transferFrom` and forwards `address(this)` as the LP source; conceptually identical. **Justification:** symmetric pattern; the LP-stranding window concern was closed without code change as O-1 (Solidity unwinds the entire frame on revert).
-2. **`getPoolSupported` gate.** `:215` blocks burns against pools the planner doesn't recognise. UniV2 router does not gate by factory membership. **Justification:** the Concierge's `_index` resolves via `planner.tokenIndex`, which already requires a registered pool; this guard is belt-and-braces for the LP-side path that doesn't otherwise touch the planner. _Note: this guard is present on `burn` but not on the other entry points; they implicitly require it via `_index`. No finding._
+2. **`getPoolSupported` gate.** `:215` blocks burns against pools the planner doesn't recognize. UniV2 router does not gate by factory membership. **Justification:** the Concierge's `_index` resolves via `planner.tokenIndex`, which already requires a registered pool; this guard is belt-and-braces for the LP-side path that doesn't otherwise touch the planner. _Note: this guard is present on `burn` but not on the other entry points; they implicitly require it via `_index`. No finding._
 3. **No `sweepEth`.** Non-payable; no native input. `unwrap` still produces native ETH on output via the pool's `WRAPPER.withdraw` path (`PartyPoolMintImpl.sol:34`).
 
 ### 5.4 swapMint
@@ -643,11 +643,11 @@ Features that exist in canonical AMMs but we deliberately do not have, with the 
 
 - **Concentrated liquidity / ticks** (Uniswap V3) — our LMSR is continuous; no tick management. Concentration would require a per-range kernel and is out of scope.
 - **TWAP oracle / `observe` accumulator** (Uniswap V2/V3) — we publish no on-chain TWAP. Spot views are explicitly **not** safe as a same-tx oracle; documented in the doc-banner on `IPartyPool.sol:25-37` and `IPartyInfo.sol:8-16` (closes O-5; `checklist.md` H.4).
-- **Internal balances** (Balancer V2) — out of scope; one transfer per swap. Adding internal balances would require a global authoriser-style design that conflicts with our minimal-admin posture.
+- **Internal balances** (Balancer V2) — out of scope; one transfer per swap. Adding internal balances would require a global authorizer-style design that conflicts with our minimal-admin posture.
 - **Meta-pools / base-pool composition** (Curve) — out of scope; not part of v2.
-- **Stable swap invariant** (Curve) — we use the general LMSR kernel; the stable-swap-style 1:1 region is approximated by the kernel's `b = κ · S(q)` stabilisation. (A balanced-pair Taylor fast-path was prototyped — `doc/reference/PartyPoolBalancedPair.sol` / `doc/reference/LMSRStabilizedBalancedPair.sol` — but is not part of the production build; preserved as v2 reference.)
+- **Stable swap invariant** (Curve) — we use the general LMSR kernel; the stable-swap-style 1:1 region is approximated by the kernel's `b = κ · S(q)` stabilization. (A balanced-pair Taylor fast-path was prototyped — `doc/reference/PartyPoolBalancedPair.sol` / `doc/reference/LMSRStabilizedBalancedPair.sol` — but is not part of the production build; preserved as v2 reference.)
 - **Per-pool fee tiers post-deploy** (Uniswap V3) — fees are deploy-fixed; admin cannot change. `admin-powers.md` documents the immutability.
-- **Authoriser pattern** (Balancer V2) — single owner per pool/planner; no pluggable authoriser. Future migration path is multisig (`threat-model.md` §11.N7).
+- **Authorizer pattern** (Balancer V2) — single owner per pool/planner; no pluggable authorizer. Future migration path is multisig (`threat-model.md` §11.N7).
 - **Recovery / sweep / rescue** functions on the pool (some Curve pools). Intentionally absent (`checklist.md` D.11).
 - **`renounceOwnership`** — disabled on purpose (`OwnableExternal.sol:40`); standard Ownable2Step but with this carve-out.
 - **EIP-2612 `permit` on the LP token** — we delegate signed flows to Permit2.
@@ -661,7 +661,7 @@ Features that exist in canonical AMMs but we deliberately do not have, with the 
 | Function                                                | Divergence                                                                            | Justification status                                                                                                                                                               |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `swap` / `swapMint` / `mint`                            | `payer` is a free user-supplied parameter                                             | OK — gated by `msg.sender == payer` for APPROVAL/PREFUNDING (`PartyPoolBase.sol:211,216`) and by Permit2 witness signature; matrix §B.1, threat-model §5 (allowance-theft cluster) |
-| `swap` / `swapMint` / `mint`                            | `fundingSelector` callback mode skips `msg.sender == payer` check                     | OK — caller obligation documented at `PartyPoolBase.sol:233-240`; in-tree consumer (`PartyConcierge`) honours it (`:46`); checklist §A.3 / §H.7                                    |
+| `swap` / `swapMint` / `mint`                            | `fundingSelector` callback mode skips `msg.sender == payer` check                     | OK — caller obligation documented at `PartyPoolBase.sol:233-240`; in-tree consumer (`PartyConcierge`) honors it (`:46`); checklist §A.3 / §H.7                                    |
 | `collectProtocolFees`                                   | Anyone-callable (UniV3 is owner-only)                                                 | OK — recipient fixed in storage; matrix §B.1 row `P_i × collectProtocolFees`; §G                                                                                                   |
 | `collectProtocolFees`                                   | Recipient is read-at-call-time, not at accrual                                        | OK — documented on `setProtocolFeeAddress` (`PartyPool.sol:122-129`); closes O-4                                                                                                   |
 | `setProtocolFeePpm` / `setProtocolFeeAddress` (Planner) | No timelock                                                                           | OK — §2.4 + `threat-model.md` §11.N7; live-pool fees are immutable so blast radius bounded to future pools                                                                         |
@@ -670,7 +670,7 @@ Features that exist in canonical AMMs but we deliberately do not have, with the 
 | `newPool`                                               | `payer` chosen by `onlyOwner` caller                                                  | OK — documented inline at `PartyPlanner.sol:84-103`; closes O-3                                                                                                                    |
 | `burn` (proportional)                                   | No per-asset `min_amounts` slippage vector                                            | OK — proportional burn output is exactly `lpShare · cached`; deadline parameter is the time-side bound; documented in this doc §3.5                                                |
 | `flashLoan`                                             | Single-token only (Balancer is multi)                                                 | OK — by design; ERC-3156 conformance; no use-case identified for multi-asset variant                                                                                               |
-| `swapMint` / `burnSwap`                                 | Single-token entry points (Curve generalises through `add_liquidity` + sparse vector) | OK — closed-form LMSR path is cheaper and exact (`LMSRStabilized.swapAmountsForMint` / `swapAmountsForBurn`)                                                                       |
+| `swapMint` / `burnSwap`                                 | Single-token entry points (Curve generalizes through `add_liquidity` + sparse vector) | OK — closed-form LMSR path is cheaper and exact (`LMSRStabilized.swapAmountsForMint` / `swapAmountsForBurn`)                                                                       |
 | LP token                                                | No EIP-2612 `permit()`                                                                | OK — Permit2 is the unified signed-flow surface                                                                                                                                    |
 | Concierge `liquidityPartySwapCallback`                  | Single callback selector for all funding flows                                        | OK — operationally simpler; auth is identity-bound via transient `_cbPool`; matrix §D.3                                                                                            |
 | Concierge `burn`                                        | `getPoolSupported` gate, but `burnSwap` does not have it                              | OK — `burnSwap` requires a registered pool implicitly via `_index(pool, tokenOut)` which calls `planner.tokenIndex`; no asymmetric risk                                            |
@@ -682,7 +682,7 @@ Features that exist in canonical AMMs but we deliberately do not have, with the 
 ## Appendix: cross-references
 
 - `asset-authority-matrix.md` — function list and per-cell auth gates with `file:line`
-- `threat-model.md` §1, §2, §5, §11 — trust posture, actors, attack-vector clusters, organisational posture
+- `threat-model.md` §1, §2, §5, §11 — trust posture, actors, attack-vector clusters, organizational posture
 - `trusted-deployer-policy.md` — operator obligations
 - `admin-powers.md` — CAN/CANNOT inventory and trapped-funds analysis
 - `checklist.md` §O.8 — this document closes that row

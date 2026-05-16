@@ -7,17 +7,17 @@
 
 This is the deliverable that replaces prose review per the process doc. Each cell answers, for one (asset × external function) pair:
 
-> _Can this function move this asset, and if so, what authorisation gates the movement, and where in the code is that gate enforced?_
+> _Can this function move this asset, and if so, what authorization gates the movement, and where in the code is that gate enforced?_
 
-**Empty cells are bugs.** A blank where movement is possible means an unenforced authorisation path. Cells documented "no movement" must be true by code inspection, not by assumption.
+**Empty cells are bugs.** A blank where movement is possible means an unenforced authorization path. Cells documented "no movement" must be true by code inspection, not by assumption.
 
 ## Conventions
 
 - **Direction in cell:** `IN` = function pulls this asset into the pool / contract; `OUT` = function pushes this asset out; `IN/OUT` = both.
-- **Auth gate:** the require/check that authorises the movement. `file:line` points to the enforcement site.
+- **Auth gate:** the require/check that authorizes the movement. `file:line` points to the enforcement site.
 - **`—`** = function does not move this asset (verified by code inspection).
 - **`(view)`** = function is read-only; cannot move anything.
-- **Modifiers** are listed as defence-in-depth. `nonReentrant` blocks cross-fn re-entry. `killable` halts after `kill()`. `native()` refunds residual `msg.value` to `msg.sender` post-body.
+- **Modifiers** are listed as defense-in-depth. `nonReentrant` blocks cross-fn re-entry. `killable` halts after `kill()`. `native()` refunds residual `msg.value` to `msg.sender` post-body.
 - **Permit2 ack:** Permit2 itself enforces signature/nonce/deadline; the pool's only obligation is to bind the witness hash so the signature is intent-specific.
 
 ## A. Fund-bearing assets (rows)
@@ -129,7 +129,7 @@ The Concierge is a router that translates user-facing ERC20 token addresses into
 
 ### D.3 Concierge auth-chain integrity check
 
-The transient context (`_cbUser`, `_cbPool`, `_cbEthBudget`, `_cbMode`) is the entire authorisation for `liquidityPartySwapCallback`. Three invariants must hold for any change:
+The transient context (`_cbUser`, `_cbPool`, `_cbEthBudget`, `_cbMode`) is the entire authorization for `liquidityPartySwapCallback`. Three invariants must hold for any change:
 
 1. **Set-before-call, cleared-after.** `_beginCall` must run _before_ any external call; `_endCall` runs after. Any new path that calls a pool must follow this pattern. (Not enforced by a modifier; any new entry needs a manual check.)
 2. **No external call between `_beginCall` and `_endCall` other than the pool itself.** A nested call to a non-pool contract during the in-flight window could spoof the callback, since `_cbPool` is a single address. Currently no such call exists in any entry; new functions must preserve this.
@@ -199,9 +199,9 @@ process; entries are kept here for the audit trail.
   `native()` pattern; refunds residual `address(this).balance` to
   `msg.sender`. Tested by `testConciergeDoesNotStrandEth`.
 - **H.4** Concierge LP-stranding window. Resolved as **O-1** (non-issue).
-  Solidity transaction atomicity makes the hypothesised partial-revert
+  Solidity transaction atomicity makes the hypothesized partial-revert
   state impossible; donated LP cannot be drained by attackers because the
-  Concierge approves no spender. Defence-in-depth retained via
+  Concierge approves no spender. Defense-in-depth retained via
   `invariant_C1_conciergeHoldsNoLp`.
 - **H.5** Read-only reentrancy on view functions. Resolved as **O-5**
   (documentation). Banner blocks added to `IPartyPool` and `IPartyInfo`

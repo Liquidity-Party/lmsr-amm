@@ -34,7 +34,7 @@ $ grep -RnE 'upgradeTo|UUPS|ERC1967|Beacon' src/   # zero hits — no upgradeabl
 ## G.2 — Inheritance order changes storage layout
 
 **MITIGATED with regression test.** `PartyPool is PartyPoolBase, OwnableExternal,
-ERC20External, IPartyPool`. C3-linearised, this resolves to slot order:
+ERC20External, IPartyPool`. C3-linearized, this resolves to slot order:
 `OwnableInternal → ERC20Internal → PartyPoolBase → PartyPool` (interfaces have no state).
 
 Closure: `test/StorageLayoutTest.t.sol` pins each named slot via `vm.load`/`vm.store` (see
@@ -62,7 +62,7 @@ $ grep -RnE 'selfdestruct\(' src/
 ```
 There is no `selfdestruct` instruction anywhere in `src/`.
 
-## G.5 — Uninitialised storage / variables
+## G.5 — Uninitialized storage / variables
 
 **OK with audit + test.** `PartyPool`'s constructor (`src/PartyPool.sol:103-116`) assigns
 six immutables (`NUM_TOKENS`, `WRAPPER`, `PERMIT2`, `KAPPA`, `FLASH_FEE_PPM`,

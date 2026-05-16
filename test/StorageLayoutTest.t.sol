@@ -19,10 +19,10 @@ import {MockERC20} from "./MockERC20.sol";
 /// CHECKLIST: G.2 — inheritance-order regression guard. PartyPool inherits
 ///   PartyPoolBase, OwnableExternal, ERC20External, IPartyPool. The storage layout assumed
 ///   by the library DELEGATECALL path (PartyPoolStorage.PoolState + _ps()) depends on the
-///   C3-linearised slot order; reordering any base would silently shift slots and corrupt
+///   C3-linearized slot order; reordering any base would silently shift slots and corrupt
 ///   state. Every test in this contract pins one named slot, so any future inheritance
 ///   reorder fails CI before it ships.
-/// CHECKLIST: G.5 — initialisation audit. `_killed` (slot 8, byte 0) is asserted false at
+/// CHECKLIST: G.5 — initialization audit. `_killed` (slot 8, byte 0) is asserted false at
 ///   construction (test_slot8_killed_read_false); `_initialized` (slot 8, byte 1) is asserted
 ///   true post-`init` (test_slot8_initialized_read_true); _tokens, _cachedUintBalances,
 ///   _protocolFeesOwed are asserted non-empty post-`init`. Bases and fees are no longer in
