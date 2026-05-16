@@ -12,7 +12,7 @@ contract AllowanceTheftTest is PartyPoolBase {
 
     /// CHECKLIST: A.1, A.2, D.10 — payer-taint + receiver-redirect blocked on swap(APPROVAL):
     /// attacker passes `payer=alice, receiver=bob` and is rejected at PartyPoolBase.sol:211
-    /// (`require(msg.sender == payer, "approval: caller != payer")`). D.10 (unauthorised
+    /// (`require(msg.sender == payer, "approval: caller != payer")`). D.10 (unauthorized
     /// transferFrom): the LP-token surface uses OZ-derived `_spendAllowance` discipline
     /// (`ERC20External.sol:108`); the funding-pull surface is gated by the payer-equality
     /// check tested here.
@@ -53,7 +53,7 @@ contract AllowanceTheftTest is PartyPoolBase {
 
     /// CHECKLIST: A.1, A.2, D.10 — payer-taint + receiver-redirect blocked on mint(APPROVAL):
     /// attacker (bob) calls mint with `payer=alice, receiver=bob`; gate at
-    /// PartyPoolMintImpl.sol:75 reverts before any token is pulled. D.10 (unauthorised
+    /// PartyPoolMintImpl.sol:75 reverts before any token is pulled. D.10 (unauthorized
     /// transferFrom): the funding-pull `safeTransferFrom(payer,...)` is gated by the
     /// equality check exercised here, blocking the classic owner-bypass on transferFrom.
     /// @notice Attacker cannot spend victim's allowances via mint(APPROVAL).
@@ -85,7 +85,7 @@ contract AllowanceTheftTest is PartyPoolBase {
     /// CHECKLIST: A.1, A.2, D.10 — payer-taint + receiver-redirect blocked on swapMint(APPROVAL):
     /// attacker (bob) calls swapMint with `payer=alice, receiver=bob`; gate at
     /// PartyPoolMintImpl.sol:75 reverts before LP tokens can be redirected. D.10
-    /// (unauthorised transferFrom): same payer-equality gate as the mint case.
+    /// (unauthorized transferFrom): same payer-equality gate as the mint case.
     /// @notice Attacker cannot spend victim's allowance via swapMint(APPROVAL).
     function testAllowanceTheft_swapMint_reverts() public {
         uint256 maxIn = 10_000;

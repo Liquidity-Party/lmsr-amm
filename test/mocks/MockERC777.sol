@@ -3,7 +3,7 @@
 pragma solidity =0.8.35;
 
 // REUSABLE TEST MOCK — picked up by §C reentrancy closures and reserved for §D
-// (callback-token / hook-token attack surface). Do not specialise to a single
+// (callback-token / hook-token attack surface). Do not specialize to a single
 // caller; keep the interface generic enough that §D can drive it independently.
 
 import {ERC20} from "../../lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
@@ -20,7 +20,7 @@ interface IMockERC777Sender {
 
 /// @notice Minimal ERC777-style hook-callback token used to probe reentrancy / read-only
 ///         reentrancy hazards on integrators that observe pool state mid-callback.
-/// @dev Behaviour:
+/// @dev Behavior:
 ///       - `transfer` / `transferFrom` move exactly `amount` tokens (no fee skim), so the
 ///         strict-equality check at `PartyPlanner.sol:185` passes and a pool *can* deploy
 ///         with this token. The hazard is purely the callback, not balance drift.

@@ -13,7 +13,7 @@ echo ""
 read -p "Are you sure you want to proceed? (type 'yes' to confirm): " confirmation
 
 if [[ "$confirmation" != "yes" ]]; then
-  echo "Cancelled."
+  echo "Canceled."
   exit 0
 fi
 

@@ -21,7 +21,7 @@ import {TestERC20} from "./TestHelpers.sol";
 ///           - burnSwap: caller is underpaid for the same α burn (value
 ///             retained in cached, donated to remaining LPs).
 ///         Fix: both call sites now derive `qFromCached = cached/base` and
-///         invoke the pure kernel variants. These tests pin that behaviour.
+///         invoke the pure kernel variants. These tests pin that behavior.
 contract FeeGapSwapMintBurnSwapFixTest is Test {
     using ABDKMath64x64 for int128;
 

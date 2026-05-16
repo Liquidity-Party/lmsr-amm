@@ -448,7 +448,7 @@ contract PlannerOwnership2StepTest is Test {
 //      burnSwap(output = j ≠ inputTokenIndex) does not revert via ABDK overflow.
 // =============================================================================
 //
-// Pre-fix behaviour (audit-report.md §M-1):
+// Pre-fix behavior (audit-report.md §M-1):
 //   swapMint rescaled every qInternal[k] by newTotal/oldTotal while mutating
 //   only cached[inputTokenIndex]. That broke qInternal[j]·base[j] ≤ cached[j]
 //   for j ≠ inputTokenIndex, so a subsequent burnSwap(output = j) would try to
@@ -595,7 +595,7 @@ contract M1_SwapMintQInternalSyncTest is Test {
 //      during onFlashLoan see the pre-loan state.
 // =============================================================================
 //
-// Pre-fix behaviour (audit-report.md §I-2):
+// Pre-fix behavior (audit-report.md §I-2):
 //   _protocolFeesOwed[tokenIndex] was incremented BEFORE safeTransfer + onFlashLoan,
 //   so an integrator reading pool.allProtocolFeesOwed() inside the callback saw
 //   the post-loan accumulator, breaking the read-only-reentrancy view.

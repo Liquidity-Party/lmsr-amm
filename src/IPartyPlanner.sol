@@ -42,7 +42,7 @@ interface IPartyPlanner is IOwnable {
     ) external returns (IPartyPool pool, uint256 lpAmount);
 
     /// @notice Creates a new PartyPool instance and initializes it with initial deposits (legacy signature).
-    /// @dev Deprecated in favour of the kappa-based overload below; kept for backwards compatibility.
+    /// @dev Deprecated in favor of the kappa-based overload below; kept for backwards compatibility.
     /// @param name LP token name
     /// @param symbol LP token symbol
     /// @param tokens token addresses (n)

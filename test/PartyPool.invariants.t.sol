@@ -381,7 +381,7 @@ contract PartyPoolInvariantHandler is CommonBase, StdCheats, StdUtils, StdAssert
             assertTrue(false, "I-13 VIOLATION: mint allowance theft succeeded");
         } catch { }
 
-        // Defence-in-depth: even if the call somehow proceeded silently, no asset moved.
+        // Defense-in-depth: even if the call somehow proceeded silently, no asset moved.
         for (uint256 i = 0; i < n; i++) {
             assertEq(tokens[i].balanceOf(victim), victimBefore[i],
                 "I-13: victim reserve balance decreased after theft attempt");

@@ -112,7 +112,7 @@ contract ImbalancedPoolTest is Test {
     /// CHECKLIST: H.8 — End-to-end imbalanced-pool coverage: WBTC (8 dec) / SHIB
     /// (18 dec) / WETH (18 dec) at realistic relative magnitudes (~22 orders of
     /// magnitude between WBTC satoshis and SHIB wei). Validates that the kernel
-    /// initialises, prices, and swaps coherently under the worst-case real-world
+    /// initializes, prices, and swaps coherently under the worst-case real-world
     /// imbalance the pool will face. Companion to the synthetic boundary tests
     /// `testInitImbalanced` and `testSwapPriceCoherenceImbalanced`.
     /// @notice Verify the pool was initialized with the correct imbalanced amounts

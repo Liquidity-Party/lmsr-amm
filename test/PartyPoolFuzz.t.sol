@@ -177,7 +177,7 @@ contract PartyPoolFuzzTest is PartyPoolBase {
             assertEq(aOut, qOut, "I-6 swap: amountOut mismatch between quote and execute");
             assertEq(aFee, qFee, "I-6 swap: inFee mismatch between quote and execute");
         } catch {
-            // "too small": valid pool behaviour — no state change, invariants below.
+            // "too small": valid pool behavior — no state change, invariants below.
         }
         vm.stopPrank();
 
@@ -224,7 +224,7 @@ contract PartyPoolFuzzTest is PartyPoolBase {
         {
             assertLt(returnOut, amountIn, "I-5: round-trip swap i->j->i must not be profitable");
         } catch {
-            // "too small" or zero-output due to rounding: valid pool behaviour.
+            // "too small" or zero-output due to rounding: valid pool behavior.
         }
         vm.stopPrank();
 
@@ -301,7 +301,7 @@ contract PartyPoolFuzzTest is PartyPoolBase {
 
     /// Fuzz: mint then burn round-trip; verifies invariants hold through the sequence.
     /// Burn may revert "zero balance" when lpMinted is so small that proportional shares
-    /// round to zero; that is valid pool behaviour — we skip the burn assertion in that case.
+    /// round to zero; that is valid pool behavior — we skip the burn assertion in that case.
     function testFuzz_mintBurnRoundTrip(uint256 lpAmount) public {
         uint256 totalSupply = pool.totalSupply();
         lpAmount = bound(lpAmount, 1, totalSupply / 5 + 1);
@@ -329,7 +329,7 @@ contract PartyPoolFuzzTest is PartyPoolBase {
                 assertEq(recovered, withdrawAmounts[i], "mint-burn: recovered != withdrawAmounts");
             }
         } catch {
-            // "zero balance": lpMinted too small for proportional withdrawal — valid pool behaviour.
+            // "zero balance": lpMinted too small for proportional withdrawal — valid pool behavior.
         }
 
         _assertI1(pool);
@@ -413,7 +413,7 @@ contract PartyPoolFuzzTest is PartyPoolBase {
 
             _assertI9(protoBefore, pool);
         } catch {
-            // infeasible γ ("too small" / "too large") — valid pool behaviour, no state change.
+            // infeasible γ ("too small" / "too large") — valid pool behavior, no state change.
         }
         vm.stopPrank();
 
@@ -595,7 +595,7 @@ contract PartyPoolFuzzTest is PartyPoolBase {
             assertEq(aOut, qOut, "I-6 burnSwap: amountOut mismatch between quote and execute");
             assertEq(aFee, qFee, "I-6 burnSwap: outFee mismatch between quote and execute");
         } catch {
-            // "too small": valid pool behaviour — no state change, invariants below.
+            // "too small": valid pool behavior — no state change, invariants below.
         }
 
         _assertI1(pool);
@@ -839,7 +839,7 @@ contract PartyPoolFuzzTest is PartyPoolBase {
 
             _assertI9(protoBefore, pool10);
         } catch {
-            // infeasible γ — valid pool behaviour.
+            // infeasible γ — valid pool behavior.
         }
         vm.stopPrank();
 
@@ -954,7 +954,7 @@ contract PartyPoolFuzzTest is PartyPoolBase {
         {
             assertLt(returnOut, amountIn, "I-5 pool10: round-trip swap must not be profitable");
         } catch {
-            // "too small"/"too large": valid pool behaviour for out-of-range amounts.
+            // "too small"/"too large": valid pool behavior for out-of-range amounts.
         }
         vm.stopPrank();
 

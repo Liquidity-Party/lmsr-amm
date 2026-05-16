@@ -8,7 +8,7 @@ import "../lib/abdk-libraries-solidity/ABDKMath64x64.sol";
 /// @notice Sweep test: how does midpoint-b kernel precision degrade as q values
 ///         drift away from their balanced initial state?
 ///
-/// Motivation: at deployment, the `base[k]` calibration normalises each token
+/// Motivation: at deployment, the `base[k]` calibration normalizes each token
 /// so q[k] starts at similar magnitude across slots. As market prices move
 /// after launch, arbitrage flow shifts q values — high-demand tokens are
 /// drained (q drops) and low-demand tokens accumulate (q grows). Production

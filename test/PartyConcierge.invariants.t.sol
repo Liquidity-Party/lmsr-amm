@@ -353,7 +353,7 @@ contract PartyConciergeInvariantsTest is StdInvariant, Test {
 
     // ── C-4: Concierge transient context is clear between calls ──────────────
 
-    /// @notice Defence-in-depth check: between handler calls the Concierge's transient
+    /// @notice Defense-in-depth check: between handler calls the Concierge's transient
     ///         storage (`_cbUser`, `_cbPool`) must be clear so the next caller's context
     ///         cannot see a stale auth record. EIP-1153 already clears transient storage
     ///         at tx end; this invariant just confirms that no path inside Concierge

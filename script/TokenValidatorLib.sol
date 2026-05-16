@@ -288,7 +288,7 @@ library TokenValidatorLib {
             return Finding(
                 "no-fee-on-transfer",
                 Severity.WARN,
-                "transfer reverted; cannot probe fee behaviour"
+                "transfer reverted; cannot probe fee behavior"
             );
         }
         uint256 afterBal = recipient.balanceOfSelf(t);
@@ -493,7 +493,7 @@ library TokenValidatorLib {
         return Finding(
             probeName,
             Severity.WARN,
-            "could not fund probe address (balance slot not found); token may use non-mapping storage (e.g. MiniMeToken checkpoints) -- verify behaviour off-chain"
+            "could not fund probe address (balance slot not found); token may use non-mapping storage (e.g. MiniMeToken checkpoints) -- verify behavior off-chain"
         );
     }
 

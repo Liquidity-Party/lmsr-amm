@@ -560,7 +560,7 @@ contract Permit2Test is Test {
     // §9.5 additional negative-path tests
     // -------------------------------------------------------------------------
 
-    /// CHECKLIST: F.1 — wrong-signer attack: only the actual payer's key can authorise the transfer.
+    /// CHECKLIST: F.1 — wrong-signer attack: only the actual payer's key can authorize the transfer.
     /// CHECKLIST: F.3 — Permit2's ecrecover path validates `signer != address(0)` and `signer == claimedSigner`
     ///                 (lib/permit2/src/libraries/SignatureVerification.sol:39-41); pool does not call ecrecover.
     /// @notice Wrong owner: signature is from attacker, but pool.swap is called with owner=alice.
@@ -795,7 +795,7 @@ contract Permit2Test is Test {
     ///                 Pool does not call raw ERC-20 `permit()` anywhere (verified:
     ///                 `grep -rE '\\.permit\\(' src/` returns no hits).
     /// @notice Front-runner cannot block alice by pre-consuming her signature: any attempt to relay the
-    ///         exact same signed payload performs the trade in alice's favour (advancing her swap), and
+    ///         exact same signed payload performs the trade in alice's favor (advancing her swap), and
     ///         then her own (or a second) submission fails on InvalidNonce — alice is never griefed,
     ///         the worst case is that her trade was already executed for her.
     function testChecklist_F5_permit2NotFrontRunnable() public {

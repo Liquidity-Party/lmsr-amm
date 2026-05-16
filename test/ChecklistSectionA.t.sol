@@ -2,7 +2,7 @@
 /* solhint-disable */
 pragma solidity =0.8.35;
 
-/// @title Checklist §A — Authorisation & taint on external arguments
+/// @title Checklist §A — Authorization & taint on external arguments
 /// @notice Closure tests for §A rows that are not already covered by an existing
 ///         tagged test elsewhere. Specifically:
 ///           - A.5: visibility audit — every `external/public` non-view in the

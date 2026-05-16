@@ -105,7 +105,7 @@ contract PartyPoolFlashLoanTest is PartyPoolBase {
 
     /// CHECKLIST: A.3, I.1 — the flash-loan callback is the second arbitrary-call
     /// surface (alongside funding-selector callbacks). The pool forwards `msg.sender`
-    /// faithfully as `initiator` so a borrower can gate against unauthorised drivers,
+    /// faithfully as `initiator` so a borrower can gate against unauthorized drivers,
     /// closing the equivalent of DVL Flashloan-flaw and the §A "arbitrary external call"
     /// row for this surface.
     function testChecklist_I1_initiatorCheck() public {
