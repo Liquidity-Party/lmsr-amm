@@ -460,11 +460,11 @@ library LMSRStabilized {
                         //   • _ceilMul(b, lnSafe)          → xj larger
                         //   • +1 final ulp cushion         → covers compounded
                         //                                    rounding remainders.
-                        int128 expArg = _ceilMul(yj, invB);
-                        require(expArg <= EXP_LIMIT, "too large");
-                        int128 E = _ceilExp(expArg);
-                        require(E > ONE, "too large"); // yj > 0 implies E > 1; defensive
-                        int128 EMinusOne = E.sub(ONE);
+                        int128 expArg1 = _ceilMul(yj, invB);
+                        require(expArg1 <= EXP_LIMIT, "too large");
+                        int128 E1 = _ceilExp(expArg1);
+                        require(E1 > ONE, "too large"); // yj > 0 implies E1 > 1; defensive
+                        int128 EMinusOne = E1.sub(ONE);
                         // exp(−qDiff/b) with qDiff/b > 32 is ≤ exp(−32) ≈ 1.3e-14 of
                         // Q64.64, comfortably within int128 — even saturating the
                         // _ceilExp +1 ulp does not overflow.
