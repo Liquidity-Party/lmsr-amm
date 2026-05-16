@@ -2,17 +2,18 @@
 pragma solidity =0.8.35;
 
 import {LMSRStabilizedBalancedPair} from "./LMSRStabilizedBalancedPair.sol";
-import {PartyPool} from "./PartyPool.sol";
+import {PartyPool} from "../../src/PartyPool.sol";
 
-/// @dev DEPRECATED — `PartyPlanner` no longer deploys this wrapper. Retained for reference
-///      and for ABI compatibility with any pools deployed before the BalancedPair fast-path
-///      was disabled. The `balancedPairKernel()` marker is preserved so
-///      `PartyInfo._isBalancedPair` continues to dispatch correctly against legacy pools.
+/// @dev REFERENCE-ONLY — preserved outside `src/` to document the BalancedPair fast-path
+///      idea for a possible v2. Not compiled into production builds. The factory
+///      (`PartyPlanner`) only deploys regular `PartyPool`; nothing in `src/` references this
+///      wrapper. Restoring the override path would also require re-introducing the `virtual`
+///      modifier on `PartyPool._swapAmountsForExactInput`.
 contract PartyPoolBalancedPair is PartyPool {
     // Returns the named tuple from the library directly to the caller; both values are
     // forwarded via the function's named returns.
     // slither-disable-next-line unused-return
-    function _swapAmountsForExactInput(uint256 i, uint256 j, int128 a) internal virtual override view
+    function _swapAmountsForExactInput(uint256 i, uint256 j, int128 a) internal virtual view
     returns (int128 amountIn, int128 amountOut) {
         return LMSRStabilizedBalancedPair.swapAmountsForExactInput(_lmsr, i, j, a);
     }

@@ -211,7 +211,7 @@ library Deploy {
             }
         }
 
-        // `args.stable` is a no-op for the current planner ABI (BalancedPair deprecated).
+        // `args.stable` is a no-op for the current planner ABI.
         // Pools deployed via this helper are unweighted (kernel is unweighted).
         args.stable;
         (pool, lpTokens) = IPartyPlanner(v.planner).newPool(

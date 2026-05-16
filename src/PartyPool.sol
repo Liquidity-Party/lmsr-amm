@@ -376,11 +376,9 @@ contract PartyPool is PartyPoolBase, OwnableExternal, ERC20External, IPartyPool 
     }
 
 
-    // Reachable via _quoteSwapExactIn(); virtual so PartyPoolBalancedPair can override
-    // with the balanced-pair fast path. Slither's intra-procedural detector misses
-    // both the dispatch and the override.
+    // Reachable via _quoteSwapExactIn(). Slither's intra-procedural detector misses the dispatch.
     // slither-disable-next-line dead-code
-    function _swapAmountsForExactInput(uint256 i, uint256 j, int128 a) internal virtual view
+    function _swapAmountsForExactInput(uint256 i, uint256 j, int128 a) internal view
     returns (int128 amountIn, int128 amountOut) {
         // Library returns are bound to this function's named-return tuple via `return`.
         // slither-disable-next-line unused-return

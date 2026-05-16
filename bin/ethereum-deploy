@@ -79,7 +79,6 @@ if [ "$1" == "broadcast" ] || [ "$1" == "record" ]; then
   PARTY_POOL_EXTRA_IMPL=$(library PartyPoolExtraImpl)
   PARTY_INFO=$(contract PartyInfo)
   PARTY_POOL_INIT_CODE=$(contractByIndex 3)
-  PARTY_POOL_INIT_CODE_BP=$(contractByIndex 4)
   PARTY_PLANNER=$(contract PartyPlanner)
   PARTY_CONCIERGE=$(contract PartyConcierge)
 
@@ -98,7 +97,6 @@ if [ "$1" == "broadcast" ] || [ "$1" == "record" ]; then
     --arg partyPoolMintImpl "$PARTY_POOL_MINT_IMPL" \
     --arg partyPoolExtraImpl "$PARTY_POOL_EXTRA_IMPL" \
     --arg partyPoolInitCode "$PARTY_POOL_INIT_CODE" \
-    --arg partyPoolInitCodeBP "$PARTY_POOL_INIT_CODE_BP" \
     --arg partyConcierge "$PARTY_CONCIERGE" \
     '
     {
@@ -108,7 +106,6 @@ if [ "$1" == "broadcast" ] || [ "$1" == "record" ]; then
         PartyPoolMintImpl: $partyPoolMintImpl,
         PartyPoolExtraImpl: $partyPoolExtraImpl,
         PartyPoolInitCode: $partyPoolInitCode,
-        PartyPoolBalancedPairInitCode: $partyPoolInitCodeBP,
         PartyConcierge: $partyConcierge
       }
     } as $entry |
@@ -121,7 +118,6 @@ if [ "$1" == "broadcast" ] || [ "$1" == "record" ]; then
       --arg partyPoolMintImpl "$PARTY_POOL_MINT_IMPL" \
       --arg partyPoolExtraImpl "$PARTY_POOL_EXTRA_IMPL" \
       --arg partyPoolInitCode "$PARTY_POOL_INIT_CODE" \
-      --arg partyPoolInitCodeBP "$PARTY_POOL_INIT_CODE_BP" \
       --arg partyConcierge "$PARTY_CONCIERGE" \
       '{($chainId): {
         v1: {
@@ -130,7 +126,6 @@ if [ "$1" == "broadcast" ] || [ "$1" == "record" ]; then
           PartyPoolMintImpl: $partyPoolMintImpl,
           PartyPoolExtraImpl: $partyPoolExtraImpl,
           PartyPoolInitCode: $partyPoolInitCode,
-          PartyPoolBalancedPairInitCode: $partyPoolInitCodeBP,
           PartyConcierge: $partyConcierge
         }
       }}' > "$METADATA_FILE"

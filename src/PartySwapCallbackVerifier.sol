@@ -3,7 +3,6 @@ pragma solidity =0.8.35;
 
 import {IPartyPlanner} from "./IPartyPlanner.sol";
 import {PartyPool} from "./PartyPool.sol";
-import {PartyPoolBalancedPair} from "./PartyPoolBalancedPair.sol";
 
 library PartySwapCallbackVerifier {
 
@@ -13,7 +12,6 @@ library PartySwapCallbackVerifier {
     // slither-disable-next-line too-many-digits
     function verifyCallback(IPartyPlanner planner, bytes32 nonce) internal view {
         if(_verify(planner, keccak256(type(PartyPool).creationCode), nonce)) return;
-        if(_verify(planner, keccak256(type(PartyPoolBalancedPair).creationCode), nonce)) return;
         revert('unauthorized callback');
     }
 

@@ -6,7 +6,6 @@ import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20
 import {IPartyPool} from "./IPartyPool.sol";
 import {IPartyInfo} from "./IPartyInfo.sol";
 import {LMSRStabilized} from "./LMSRStabilized.sol";
-import {LMSRStabilizedBalancedPair} from "./LMSRStabilizedBalancedPair.sol";
 import {PartyPoolHelpers} from "./PartyPoolHelpers.sol";
 import {PartyPoolMintImpl} from "./PartyPoolMintImpl.sol";
 
@@ -102,22 +101,6 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
     }
 
 
-    // Selector for the BalancedPair marker function on PartyPoolBalancedPair. Pools with this
-    // selector use the fast-path approximation kernel; regular PartyPool does not expose it.
-    // NOTE: `PartyPlanner` no longer deploys the BalancedPair wrapper, so this dispatch is only
-    // reachable for legacy pools that may have been deployed via earlier factory versions.
-    // Retained intentionally — the dispatch is harmless for non-BP pools and ensures correct
-    // quotes for any historical BP deployments.
-    bytes4 private constant BALANCED_PAIR_KERNEL_SELECTOR = 0x3b840e09; // keccak256("balancedPairKernel()")[:4]
-
-    function _isBalancedPair(IPartyPool pool) internal view returns (bool) {
-        // staticcall to a missing selector returns success=false; pools that implement
-        // balancedPairKernel() return success=true with a 32-byte boolean payload.
-        // slither-disable-next-line low-level-calls
-        (bool ok, bytes memory data) = address(pool).staticcall(abi.encodeWithSelector(BALANCED_PAIR_KERNEL_SELECTOR));
-        return ok && data.length == 32 && abi.decode(data, (bool));
-    }
-
     /// @inheritdoc IPartyInfo
     function swapAmounts(
         IPartyPool pool,
@@ -141,17 +124,9 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         int128 deltaInternalI = ABDKMath64x64.divu(netUintForSwap, baseI);
         require(deltaInternalI > int128(0), "too small");
 
-        int128 amountInInternalUsed;
-        int128 amountOutInternal;
-        if (_isBalancedPair(pool)) {
-            (amountInInternalUsed, amountOutInternal) = LMSRStabilizedBalancedPair.swapAmountsForExactInput(
-                lmsr.kappa, lmsr.qInternal, inputTokenIndex, outputTokenIndex, deltaInternalI
-            );
-        } else {
-            (amountInInternalUsed, amountOutInternal) = LMSRStabilized.swapAmountsForExactInput(
-                lmsr.kappa, lmsr.qInternal, inputTokenIndex, outputTokenIndex, deltaInternalI
-            );
-        }
+        (int128 amountInInternalUsed, int128 amountOutInternal) = LMSRStabilized.swapAmountsForExactInput(
+            lmsr.kappa, lmsr.qInternal, inputTokenIndex, outputTokenIndex, deltaInternalI
+        );
 
         amountIn = _internalToUintCeilPure(amountInInternalUsed, baseI);
         inFee = _ceilFee(amountIn, feePpm);

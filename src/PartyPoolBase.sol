@@ -87,8 +87,7 @@ abstract contract PartyPoolBase is OwnableInternal, ERC20Internal, ReentrancyGua
     /// @notice Mapping from token address => (index+1). A zero value indicates the token is not in the pool.
     /// @dev Use index = _tokenAddressToIndexPlusOne[token] - 1 when non-zero.
     // Read in PartyPoolExtraImpl.flashLoan and via tokenIndex through the planner.
-    // Slither analyzes PartyPoolBalancedPair in isolation and does not see the
-    // inherited library-delegatecall reads, so it flags this as unused-state.
+    // Slither does not track the library-delegatecall reads, so it flags this as unused-state.
     // slither-disable-next-line unused-state
     mapping(IERC20=>uint) internal _tokenAddressToIndexPlusOne; // Uses index+1 so a result of 0 indicates a failed lookup
 

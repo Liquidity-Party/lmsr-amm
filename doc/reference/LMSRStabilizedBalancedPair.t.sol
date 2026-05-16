@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity =0.8.35;
 
-import "../src/LMSRStabilized.sol";
-import "../src/LMSRStabilizedBalancedPair.sol";
-import "./LMSRStabilizedBase.t.sol";
+import "../../src/LMSRStabilized.sol";
+import "./LMSRStabilizedBalancedPair.sol";
+import "../../test/LMSRStabilizedBase.t.sol";
 
-/// @notice Tests for LMSRStabilizedBalancedPair approximation and single-token mint/burn helpers.
+/// @notice REFERENCE-ONLY tests for the deprecated `LMSRStabilizedBalancedPair` approximation.
+/// @dev Preserved alongside `doc/reference/LMSRStabilizedBalancedPair.sol` to document the
+///      BP fast-path idea for a possible v2. Not compiled by the production build.
 contract LMSRStabilizedBalancedPairTest is LMSRStabilizedBase {
     using LMSRStabilized for LMSRStabilized.State;
     using ABDKMath64x64 for int128;

@@ -19,8 +19,6 @@ contract ContractSizeTest is Test {
         string artifact; // "File.sol:Contract" relative to src/
     }
 
-    // BalancedPair (PartyPoolBalancedPair + PartyPoolBalancedPairInitCode) is
-    // deprecated and will not be deployed. Excluded from the size enforcement.
     function _targets() internal pure returns (Target[] memory targets) {
         targets = new Target[](6);
         targets[0] = Target("PartyPlanner",                  "PartyPlanner.sol:PartyPlanner");

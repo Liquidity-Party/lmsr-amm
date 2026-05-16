@@ -78,9 +78,7 @@ interface IPartyInfo {
     // Swap quotes
     // -------------------------------------------------------------------------
 
-    /// @notice Quote an exact-input swap. Mirrors the on-chain swap math; auto-detects whether
-    ///         the pool uses the BalancedPair fast-path kernel (via the `balancedPairKernel()`
-    ///         marker selector) and routes accordingly.
+    /// @notice Quote an exact-input swap. Mirrors the on-chain swap math.
     /// @param pool             pool being quoted
     /// @param inputTokenIndex  index of token being sold
     /// @param outputTokenIndex index of token being bought

@@ -1,18 +1,16 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity =0.8.35;
 
-import {ABDKMath64x64} from "../lib/abdk-libraries-solidity/ABDKMath64x64.sol";
-import {LMSRStabilized} from "./LMSRStabilized.sol";
+import {ABDKMath64x64} from "../../lib/abdk-libraries-solidity/ABDKMath64x64.sol";
+import {LMSRStabilized} from "../../src/LMSRStabilized.sol";
 
 // Slither's `divide-before-multiply` detector targets uint integer truncation. Every
 // arithmetic value in this approximation kernel is int128 Q64.64 fixed-point.
 // slither-disable-start divide-before-multiply
 /// @notice Specialized functions for the 2-asset stablecoin case.
-/// @dev DEPRECATED — `PartyPlanner` no longer deploys the `PartyPoolBalancedPair` wrapper,
-///      so this library is unreachable from any pool deployed by the current factory.
-///      Retained in-tree for audit history and for `PartyInfo._isBalancedPair` dispatch
-///      against any legacy on-chain pools that still expose the `balancedPairKernel()`
-///      marker selector.
+/// @dev REFERENCE-ONLY — preserved outside `src/` to document the BalancedPair fast-path idea
+///      for a possible v2. Not compiled into production builds; no pool deployed by the
+///      current factory reaches this library. Pairs with `doc/reference/PartyPoolBalancedPair.sol`.
 library LMSRStabilizedBalancedPair {
     using ABDKMath64x64 for int128;
 

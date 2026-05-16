@@ -4,8 +4,6 @@ pragma solidity =0.8.35;
 import {IPartyPool} from "./IPartyPool.sol";
 import {IPartyPoolDeployer} from "./IPartyPoolDeployer.sol";
 import {PartyPool} from "./PartyPool.sol";
-// Imported only by the deprecated `PartyPoolBalancedPairInitCode` below.
-import {PartyPoolBalancedPair} from "./PartyPoolBalancedPair.sol";
 
 /// @notice Minimal interface for the init-code storage contracts below.
 interface IPartyPoolInitCode {
@@ -23,18 +21,6 @@ contract PartyPoolInitCode is IPartyPoolInitCode {
     // slither-disable-next-line too-many-digits
     function creationCode() external pure returns (bytes memory) {
         return type(PartyPool).creationCode;
-    }
-}
-
-/// @notice DEPRECATED init-code storage for the `PartyPoolBalancedPair` wrapper.
-/// @dev Retained for source compatibility and audit history; no longer referenced by
-///      `PartyPlanner` or `PartyPoolDeployer`. The underlying `PartyPoolBalancedPair`
-///      source is also retained but is not deployed by the current factory.
-contract PartyPoolBalancedPairInitCode is IPartyPoolInitCode {
-    // See note on PartyPoolInitCode.creationCode above.
-    // slither-disable-next-line too-many-digits
-    function creationCode() external pure returns (bytes memory) {
-        return type(PartyPoolBalancedPair).creationCode;
     }
 }
 

@@ -3,7 +3,6 @@ pragma solidity =0.8.35;
 
 import "forge-std/Test.sol";
 import "../src/LMSRStabilized.sol";
-import "../src/LMSRStabilizedBalancedPair.sol";
 
 /// @notice Abstract base for LMSRStabilized tests: shared state, setUp, and helper functions.
 abstract contract LMSRStabilizedBase is Test {
@@ -170,11 +169,4 @@ abstract contract LMSRStabilizedBase is Test {
         s.applySwap(i, j, amountIn, amountOut);
     }
 
-    function _swapAmountsForExactInput_balanced2(
-        uint256 i,
-        uint256 j,
-        int128 a
-    ) external view returns (int128 amountIn, int128 amountOut) {
-        return LMSRStabilizedBalancedPair.swapAmountsForExactInput(s, i, j, a);
-    }
 }

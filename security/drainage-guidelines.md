@@ -255,9 +255,10 @@ conservative for kernel safety; precision is fine well past `R_q = 10⁵`.
   Hanson). This is not an LP-extractable arbitrage; verified by closed-loop
   simulation (`security/sweep_lmsr_leak.py`).
 
-- **BalancedPair fast-path is deprecated**. `LMSRStabilizedBalancedPair` and
-  `PartyPoolBalancedPair` are present in the tree but excluded from
-  deployment size enforcement (`test/ContractSize.t.sol`). Do not use.
+- **BalancedPair fast-path has been removed from the production codebase**. The
+  `LMSRStabilizedBalancedPair` / `PartyPoolBalancedPair` sources are preserved
+  under `doc/reference/` as v2 design reference only; nothing under `src/`
+  references them.
 
 - **Precision floor**: ABDK exp/ln round-trip noise sits at ~2 × 10⁻¹⁶
   relative. All cost-preservation tests are bound at 10⁻⁹, leaving seven

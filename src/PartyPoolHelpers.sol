@@ -8,8 +8,8 @@ abstract contract PartyPoolHelpers {
 
     /// @notice Scale factor used when converting LMSR Q64.64 totals to LP token units (uint).
     /// @dev LP _tokens are minted in units equal to ABDK.mulu(lastTotalQ64x64, LP_SCALE).
-    // Inherited by PartyInfo and PartyPoolBalancedPair. Not every consumer of this
-    // helper uses LP_SCALE; the constant is part of the shared API.
+    // Inherited by PartyInfo. Not every consumer of this helper uses LP_SCALE;
+    // the constant is part of the shared API.
     // slither-disable-next-line unused-state
     uint256 internal constant LP_SCALE = 1e18; // Scale used to convert LMSR lastTotal (Q64.64) into LP token units (uint)
 

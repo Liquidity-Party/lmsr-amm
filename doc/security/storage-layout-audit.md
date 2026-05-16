@@ -11,7 +11,7 @@ Rows that close with a regression test (G.2, G.9) point at the test file instead
 `PartyPoolDeployer`. The contract has **no proxy in front of it** — the only `delegatecall`s
 that occur during normal operation are the Solidity-emitted DELEGATECALLs to deployed
 linked libraries (`PartyPoolMintImpl`, `PartyPoolExtraImpl`, `PartyPoolPermit2Witness`,
-`Funding`, `LMSRStabilized`, `LMSRStabilizedBalancedPair`). Each of those library
+`Funding`, `LMSRStabilized`). Each of those library
 addresses is fixed at link time; none are user-supplied.
 
 The shared storage layout is defined in `src/PartyPoolStorage.sol::PoolState` and asserted
@@ -191,8 +191,8 @@ view-getter `IPartyPool.LMSR()` and the per-call snapshots inside swap math) —
 intentional copies; the kernel never mutates them.
 
 `LMSRStabilized.State storage s` parameters in `applySwap`, `updateForProportionalChange`,
-`deinit`, `_computeB`, `cost`, `price`, and the helpers in `LMSRStabilizedBalancedPair`
-are correctly typed `storage` because they mutate the underlying slots.
+`deinit`, `_computeB`, `cost`, and `price` are correctly typed `storage` because they
+mutate the underlying slots.
 
 No `memory`/`storage` mixup found.
 

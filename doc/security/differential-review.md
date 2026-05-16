@@ -645,7 +645,7 @@ Features that exist in canonical AMMs but we deliberately do not have, with the 
 - **TWAP oracle / `observe` accumulator** (Uniswap V2/V3) — we publish no on-chain TWAP. Spot views are explicitly **not** safe as a same-tx oracle; documented in the doc-banner on `IPartyPool.sol:25-37` and `IPartyInfo.sol:8-16` (closes O-5; `checklist.md` H.4).
 - **Internal balances** (Balancer V2) — out of scope; one transfer per swap. Adding internal balances would require a global authoriser-style design that conflicts with our minimal-admin posture.
 - **Meta-pools / base-pool composition** (Curve) — out of scope; not part of v2.
-- **Stable swap invariant** (Curve) — we have a balanced-pair fast path (`PartyPoolBalancedPair` / `LMSRStabilizedBalancedPair`) but otherwise use the general LMSR kernel. Stable-swap-style 1:1 region is approximated by the kernel's `b = κ · S(q)` stabilisation.
+- **Stable swap invariant** (Curve) — we use the general LMSR kernel; the stable-swap-style 1:1 region is approximated by the kernel's `b = κ · S(q)` stabilisation. (A balanced-pair Taylor fast-path was prototyped — `doc/reference/PartyPoolBalancedPair.sol` / `doc/reference/LMSRStabilizedBalancedPair.sol` — but is not part of the production build; preserved as v2 reference.)
 - **Per-pool fee tiers post-deploy** (Uniswap V3) — fees are deploy-fixed; admin cannot change. `admin-powers.md` documents the immutability.
 - **Authoriser pattern** (Balancer V2) — single owner per pool/planner; no pluggable authoriser. Future migration path is multisig (`threat-model.md` §11.N7).
 - **Recovery / sweep / rescue** functions on the pool (some Curve pools). Intentionally absent (`checklist.md` D.11).
