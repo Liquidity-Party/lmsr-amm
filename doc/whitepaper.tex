@@ -229,11 +229,16 @@ inventory $q_j$ when the inner term of $\ln$ degenerates (cap-and-invert
 branch).
 
 \paragraph{Why two passes.}
-A single-pass Hanson evaluation at frozen pre-state $b$ exhibits a round-trip
-asymmetry between \texttt{swapMint} and \texttt{burnSwap} on the order of
-$\sim 200$ bps in worst-case adversarial regimes. The midpoint-$b$ kernel
-reduces this asymmetry to $\le 2$~bps, which is covered by per-swap fees in
-any closed cycle.
+A single-pass Hanson evaluation at frozen pre-state $b$ exhibits a
+round-trip pricing asymmetry between \texttt{swapMint} and
+\texttt{burnSwap} on the order of $\sim 200$ bps in worst-case adversarial
+regimes. The midpoint-$b$ kernel collapses that asymmetry while preserving
+a one-sided LP-safety guarantee (\S\ref{sec:lp-safety}): the kernel never
+pays the swapper more than the path-exact LS-LMSR reference, and the
+residual pricing asymmetry that remains is itself in the LP's favor ---
+adversarial closed cycles, including those run on already-imbalanced
+pools, cannot extract a single wei of value through it
+(\S\ref{sec:lp-safety}, ``Empirical zero-extraction'').
 
 \subsection{LP-Safety Property of Midpoint-$b$}
 \label{sec:lp-safety}
@@ -295,13 +300,32 @@ established by a combination of the structural argument above and exhaustive
 testing across the production envelope, rather than by a closed-form proof
 over the unbounded $(a, \mathbf{q}, \kappa, n)$ space.
 
-\paragraph{Consequence.}
-A \texttt{swapMint}/\texttt{burnSwap} closed cycle pays at most the
-path-exact LS-LMSR round-trip cost plus the residual midpoint-$b$
-approximation drift ($\le 2$ bps, see \texttt{security/drainage-guidelines.md}
-\S 7). Per-swap fees uniformly exceed this drift at any deployment-recommended
-fee level, so closed cycles are strictly loss-making for the attacker and
-strictly profitable for the LP.
+\paragraph{Empirical zero-extraction.}
+The per-leg overshoot test bounds each individual midpoint-$b$ call at
+$y_{\mathrm{mid}} \le y^*$. The follow-on question --- whether a closed
+\emph{sequence} of legs (e.g.\ \texttt{swap}, \texttt{swapMint},
+\texttt{burnSwap}, \texttt{mint}, \texttt{burn}, including flash-loan-
+amplified variants) can accumulate enough sub-ulp residue to extract
+value --- is addressed by the adversarial cycle test suite in
+\texttt{test/ImbalancedArbExploit.t.sol}. The suite runs flash-loan-funded
+closed cycles against pools that have already been driven to imbalance,
+covering 2-leg pure-swap loops, 3- and 4-leg mixed swap / swapMint /
+burnSwap / mint loops, and the corresponding flash-loan-amplified
+variants. The assertion at every cycle boundary is \emph{strict}: any
+closed cycle that leaves the attacker even \textbf{1 wei} richer (measured
+at pre-cycle marginal prices) is a test failure, and the same strict bound
+is required to hold on the pool TVL at pre-cycle prices. The per-token
+round-trip check (\texttt{\_assertNoStrictExtractionRoundTrip}) likewise
+enforces that the attacker's starting-token balance does not strictly
+grow. \textbf{No grid point fails.} Combined with the structural argument
+above, this constitutes the operating-envelope guarantee that the
+\textbf{cumulative residual cycle drift on midpoint-$b$ is zero, not
+$\le 2$~bps} --- per-leg pricing asymmetry exists but never accumulates
+into an extractable round trip. The residual asymmetry between
+\texttt{swapMint} and \texttt{burnSwap} relative to a direct swap path,
+characterized in \texttt{security/drainage-guidelines.md} \S 7, is a
+\emph{pricing} property of the multi-leg simulation, not an
+\emph{extractable} property of the operations.
 
 \paragraph{Capacity caps.}
 For output $y$ that would exceed available $q_j$, the kernel returns
@@ -1164,13 +1188,18 @@ that prices ordinary swaps:
         ``free'' lever to change $b$.
 \end{itemize}
 
-Because $C(\mathbf{q})$ is convex, the net kernel cost of any closed cycle of
-allowed operations sums to zero in the fee-free idealization; any practical
-implementation cost (fees, rounding, midpoint approximation error) makes the
-cycle strictly loss-making for the attacker. The midpoint-$b$ approximation
-is bounded never to overshoot the true LS-LMSR cost, and the
-\texttt{swapMint}--\texttt{burnSwap} round-trip drift is bounded at $\le 2$
-bps in adversarial regimes (\texttt{security/drainage-guidelines.md} \S7).
+Because $C(\mathbf{q})$ is convex, the net kernel cost of any closed cycle
+of allowed operations sums to zero in the fee-free idealization; any
+practical implementation cost (fees, LP-favor rounding, midpoint-$b$
+approximation residue) makes the cycle strictly loss-making for the
+attacker. The midpoint-$b$ approximation is bounded never to overshoot
+the true LS-LMSR cost (\S\ref{sec:lp-safety}); the residual per-leg
+pricing asymmetry between \texttt{swapMint} and \texttt{burnSwap}
+characterized in \texttt{security/drainage-guidelines.md} \S 7 is in the
+LP's favor and \emph{does not accumulate} into an extractable round trip
+--- adversarial closed cycles run on already-imbalanced pools cannot
+extract a single wei (\S\ref{sec:lp-safety}, ``Empirical
+zero-extraction'').
 
 \subsection{Numerical Envelope}
 
