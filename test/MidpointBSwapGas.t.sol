@@ -400,10 +400,12 @@ contract MidpointBSwapGas is Test {
     /// Parametric grid over (N, κ, a/q). Any failure pinpoints the regime.
     function test_midpoint_NeverOvershoots_LSLMSR() public {
         // (N, kappa_num/denom, aFrac_num/denom)
-        // kappa ∈ {0.005, 0.05, 0.2, 1.0, 2.0}
+        // kappa ∈ {0.0001, 0.001, 0.005, 0.05, 0.2, 1.0, 2.0}
         // a/q ∈ {0.0001, 0.001, 0.01, 0.05, 0.1}
-        // N ∈ {2, 5, 10, 50}
+        // N ∈ {2, 5, 10, 50, 100}
 
+        int128 k_e4   = ABDKMath64x64.divu(1, 10000); // 0.0001
+        int128 k_e3   = ABDKMath64x64.divu(1, 1000);  // 0.001
         int128 k_0005 = ABDKMath64x64.divu(5,  1000);
         int128 k_005  = ABDKMath64x64.divu(5,  100);
         int128 k_02   = ABDKMath64x64.divu(2,  10);
@@ -417,6 +419,12 @@ contract MidpointBSwapGas is Test {
         int128 a_1e1 = ABDKMath64x64.divu(1, 10);
 
         // N = 2
+        _assertNoOvershoot(k_e4,  2, a_e3,  "N=2 k=0.0001 a/q=1e-3");
+        _assertNoOvershoot(k_e4,  2, a_e2,  "N=2 k=0.0001 a/q=1e-2");
+        _assertNoOvershoot(k_e4,  2, a_5e2, "N=2 k=0.0001 a/q=5e-2");
+        _assertNoOvershoot(k_e3,  2, a_e3,  "N=2 k=0.001  a/q=1e-3");
+        _assertNoOvershoot(k_e3,  2, a_e2,  "N=2 k=0.001  a/q=1e-2");
+        _assertNoOvershoot(k_e3,  2, a_5e2, "N=2 k=0.001  a/q=5e-2");
         _assertNoOvershoot(k_005, 2, a_e3,  "N=2 k=0.05 a/q=1e-3");
         _assertNoOvershoot(k_005, 2, a_e2,  "N=2 k=0.05 a/q=1e-2");
         _assertNoOvershoot(k_005, 2, a_5e2, "N=2 k=0.05 a/q=5e-2");
@@ -428,12 +436,20 @@ contract MidpointBSwapGas is Test {
         _assertNoOvershoot(k_20,  2, a_1e1, "N=2 k=2.0  a/q=1e-1");
 
         // N = 5
+        _assertNoOvershoot(k_e4,  5, a_e3,  "N=5 k=0.0001 a/q=1e-3");
+        _assertNoOvershoot(k_e4,  5, a_e2,  "N=5 k=0.0001 a/q=1e-2");
+        _assertNoOvershoot(k_e3,  5, a_e3,  "N=5 k=0.001  a/q=1e-3");
+        _assertNoOvershoot(k_e3,  5, a_e2,  "N=5 k=0.001  a/q=1e-2");
         _assertNoOvershoot(k_005, 5, a_e2,  "N=5 k=0.05 a/q=1e-2");
         _assertNoOvershoot(k_02,  5, a_e2,  "N=5 k=0.2  a/q=1e-2");
         _assertNoOvershoot(k_02,  5, a_5e2, "N=5 k=0.2  a/q=5e-2");
         _assertNoOvershoot(k_10,  5, a_5e2, "N=5 k=1.0  a/q=5e-2");
 
         // N = 10
+        _assertNoOvershoot(k_e4,   10, a_e3, "N=10 k=0.0001 a/q=1e-3");
+        _assertNoOvershoot(k_e4,   10, a_e2, "N=10 k=0.0001 a/q=1e-2");
+        _assertNoOvershoot(k_e3,   10, a_e3, "N=10 k=0.001  a/q=1e-3");
+        _assertNoOvershoot(k_e3,   10, a_e2, "N=10 k=0.001  a/q=1e-2");
         _assertNoOvershoot(k_0005, 10, a_e3, "N=10 k=0.005 a/q=1e-3");
         _assertNoOvershoot(k_005,  10, a_e3, "N=10 k=0.05  a/q=1e-3");
         _assertNoOvershoot(k_005,  10, a_e2, "N=10 k=0.05  a/q=1e-2");
@@ -444,10 +460,27 @@ contract MidpointBSwapGas is Test {
         _assertNoOvershoot(k_20,   10, a_1e1,"N=10 k=2.0   a/q=1e-1");
 
         // N = 50 (large pool)
+        _assertNoOvershoot(k_e4,   50, a_e3, "N=50 k=0.0001 a/q=1e-3");
+        _assertNoOvershoot(k_e4,   50, a_e2, "N=50 k=0.0001 a/q=1e-2");
+        _assertNoOvershoot(k_e3,   50, a_e3, "N=50 k=0.001  a/q=1e-3");
+        _assertNoOvershoot(k_e3,   50, a_e2, "N=50 k=0.001  a/q=1e-2");
         _assertNoOvershoot(k_02,   50, a_e3, "N=50 k=0.2  a/q=1e-3");
         _assertNoOvershoot(k_02,   50, a_e2, "N=50 k=0.2  a/q=1e-2");
         _assertNoOvershoot(k_02,   50, a_5e2,"N=50 k=0.2  a/q=5e-2");
         _assertNoOvershoot(k_10,   50, a_1e1,"N=50 k=1.0  a/q=1e-1");
+
+        // N = 100 (very large pool)
+        _assertNoOvershoot(k_e4,   100, a_e3, "N=100 k=0.0001 a/q=1e-3");
+        _assertNoOvershoot(k_e4,   100, a_e2, "N=100 k=0.0001 a/q=1e-2");
+        _assertNoOvershoot(k_e3,   100, a_e3, "N=100 k=0.001  a/q=1e-3");
+        _assertNoOvershoot(k_e3,   100, a_e2, "N=100 k=0.001  a/q=1e-2");
+        _assertNoOvershoot(k_0005, 100, a_e3, "N=100 k=0.005 a/q=1e-3");
+        _assertNoOvershoot(k_005,  100, a_e3, "N=100 k=0.05  a/q=1e-3");
+        _assertNoOvershoot(k_02,   100, a_e3, "N=100 k=0.2   a/q=1e-3");
+        _assertNoOvershoot(k_02,   100, a_e2, "N=100 k=0.2   a/q=1e-2");
+        _assertNoOvershoot(k_02,   100, a_5e2,"N=100 k=0.2   a/q=5e-2");
+        _assertNoOvershoot(k_10,   100, a_5e2,"N=100 k=1.0   a/q=5e-2");
+        _assertNoOvershoot(k_20,   100, a_1e1,"N=100 k=2.0   a/q=1e-1");
     }
 
     /// Asymmetric-pool case: q drifts. Tests Taylor variants' divergence regime
