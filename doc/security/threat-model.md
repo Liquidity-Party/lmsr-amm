@@ -1,6 +1,6 @@
 # Threat Model — Liquidity Party LMSR-AMM
 
-**Status:** v2 pre-deploy threat model. Closes `checklist.md` §N (the Rekt Test
+**Status:** v1 pre-deploy threat model. Closes `checklist.md` §N (the Rekt Test
 and pre-review checklist).
 **Audience:** external auditors, integrators, and the operator. The intent is
 that a reader landing here cold can navigate to any specific concern in under
@@ -346,9 +346,9 @@ The signals the operator monitors continuously:
 | N.5  | At least one team member with explicit security role      | OPEN: Who is the named security lead, in writing? Currently the operator is also the reviewer — this doubles as the v1 root cause (`security-review-process.md` §1 and §3.7).                                                                                                                                            |
 | N.6  | Hardware keys for production                              | OPEN: Does the operator key hold on a hardware device (Ledger / Trezor / equivalent)? Repo evidence: none.                                                                                                                                                                                                               |
 | N.7  | Multisig / multi-human key management                     | OPEN: Is the planner-owner / pool-owner address a multisig (e.g. Safe)? Repo evidence: deployment scripts use a single EOA (`script/DeployEthereum.sol:19` in v1). No Safe / module references in `src/` or `script/`.                                                                                                   |
-| N.8  | Key invariants defined and tested on every commit         | OPEN: I-1..I-18 + C-1..C-4 are in `forge test` (`tooling-runbook.md` §O.5 marks the suite "live"), but no `.github/workflows/*.yml` exists. CI gating is asserted in `tooling-runbook.md` §O.5 ("CI runs the full suite on every PR") but the workflow file is not in-tree. Action: wire a CI workflow before v2 deploy. |
-| N.9  | Static analysis (Slither) in CI; no high-severity merges  | OPEN: `slither.config.json` exists but Slither is marked `deferred` in `tooling-runbook.md` §O.1 ("not installed in dev env at time of writing"). No CI workflow. Action: wire Slither in CI with a fail-on-high gate before v2 deploy.                                                                                  |
-| N.10 | External audit before mainnet                             | OPEN: Has a paid external audit (Spearbit / Cantina / Sherlock / Trail of Bits / OZ / boutique) been engaged for v2? Repo evidence: none. `security-review-process.md` §3.7 marks this non-negotiable for v2.                                                                                                            |
+| N.8  | Key invariants defined and tested on every commit         | OPEN: I-1..I-18 + C-1..C-4 are in `forge test` (`tooling-runbook.md` §O.5 marks the suite "live"), but no `.github/workflows/*.yml` exists. CI gating is asserted in `tooling-runbook.md` §O.5 ("CI runs the full suite on every PR") but the workflow file is not in-tree. Action: wire a CI workflow before v1 deploy. |
+| N.9  | Static analysis (Slither) in CI; no high-severity merges  | OPEN: `slither.config.json` exists but Slither is marked `deferred` in `tooling-runbook.md` §O.1 ("not installed in dev env at time of writing"). No CI workflow. Action: wire Slither in CI with a fail-on-high gate before v1 deploy.                                                                                  |
+| N.10 | External audit before mainnet                             | OPEN: Has a paid external audit (Spearbit / Cantina / Sherlock / Trail of Bits / OZ / boutique) been engaged for v1? Repo evidence: none. `security-review-process.md` §3.7 marks this non-negotiable for v1.                                                                                                            |
 | N.11 | Vulnerability disclosure / bug bounty channel             | OPEN: Is there a published disclosure email / `SECURITY.md` / Immunefi listing? Repo evidence: no `SECURITY.md` at root; no Immunefi link in `README.md`. Action: publish disclosure channel and (per `security-review-process.md` §3.8) consider Immunefi Boost for the TVL-capped launch window.                       |
 | N.12 | User-abuse vectors considered (phishing, allowance scams) | DOCUMENTED                                                                                                                                                                                                                                                                                                               | `user-allowance-guidance.md` (closes §K.6); the document covers per-trade approvals, Permit2 preference, revocation hygiene, deterministic-CREATE2-allowance hazard. |
 
@@ -440,7 +440,7 @@ same ref so superseded commits don't pin CI queues.
 
 ### N.10 — External audit
 
-_Question:_ Has a paid external audit been scheduled before mainnet v2
+_Question:_ Has a paid external audit been scheduled before mainnet v1
 deploy? Which firm, what scope, what date?
 
 **Answer (2026-05-10): DEFERRED.** A reputable external audit is currently
@@ -458,7 +458,7 @@ faster than that.
 ### N.11 — Disclosure / bounty
 
 _Question:_ Is there a published disclosure channel (`SECURITY.md`,
-dedicated email, Immunefi listing) before mainnet v2 deploy? What is the
+dedicated email, Immunefi listing) before mainnet v1 deploy? What is the
 target bounty cap and scope?
 
 **Answer (2026-05-10): YES, via X (Twitter) — primary channel
@@ -473,12 +473,12 @@ as a minimum. Promote to Immunefi Boost (per
 
 ### Launch posture (per `security-review-process.md` §3.8 / §3.9)
 
-_Question:_ Will v2 ship under a TVL cap with a public review window, and is
+_Question:_ Will v1 ship under a TVL cap with a public review window, and is
 the cap-lift trigger documented?
 
 **Answer (2026-05-10): OPEN.** Not yet decided. The process doc recommends
 both; the operator should pick a cap value, a public-review-window length,
-and a cap-lift criterion before v2 deploy. Suggested defaults if no other
+and a cap-lift criterion before v1 deploy. Suggested defaults if no other
 input: small initial cap, 14-day public review window starting at deploy,
 cap lifts after the window completes with no critical reports.
 
