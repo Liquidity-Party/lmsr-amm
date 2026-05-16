@@ -164,11 +164,11 @@ range of imbalances achievable in production for any reasonable κ.
 
 ## 4. Other tests defining the operating envelope
 
-- **LP-safety (no overshoot)** — `test/MidpointBSwapGas.t.sol`,
+- **LP-safety (no overshoot)** — `test/MidpointBSweep.sol`,
   `test_midpoint_NeverOvershoots_LSLMSR` and
   `test_midpoint_NeverOvershoots_AsymmetricPool`: hard one-sided guard that
-  midpoint-b never pays the trader more than true LS-LMSR. 26-point symmetric
-  grid (N ∈ {2,5,10,50}, κ ∈ {0.005…2.0}, a/q ∈ {10⁻⁴…10⁻¹}) plus 3-point
+  midpoint-b never pays the trader more than true LS-LMSR. 54-point symmetric
+  grid (N ∈ {2,5,10,50,100}, κ ∈ {10⁻⁴…2.0}, a/q ∈ {10⁻⁴…10⁻¹}) plus 3-point
   asymmetric grid. Tolerance: 10⁻¹⁰ absolute, well below 1 wei in Q64.64.
 
 - **Midpoint cost-preservation** — `test/LMSRKernelCostParity.t.sol`:
@@ -271,7 +271,7 @@ conservative for kernel safety; precision is fine well past `R_q = 10⁵`.
 ```
 forge test --match-contract ImbalancePrecisionSweep -vv     # Section 3 data
 forge test --match-contract LMSRKernelCostParity        # Section 4, midpoint cost preservation
-forge test --match-contract MidpointBSwapGas                # Section 4, LP-safety
+forge test --match-contract MidpointBSweep                  # Section 4, LP-safety
 forge test --match-contract ImbalancedPool                  # Section 4, end-to-end
 ```
 
