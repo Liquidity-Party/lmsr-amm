@@ -343,7 +343,7 @@ The signals the operator monitors continuously:
 | N.2  | External dependencies documented                          | DOCUMENTED                                                                                                                                                                                                                                                                                                               | This doc §4; versions pinned via `lib/` submodules.                                                                                                                  |
 | N.3  | Written, tested incident-response plan                    | DOCUMENTED                                                                                                                                                                                                                                                                                                               | This doc §9; worked example in `exploit-investigation-2026-05-07.md`.                                                                                                |
 | N.4  | Threat model includes attack vectors                      | DOCUMENTED                                                                                                                                                                                                                                                                                                               | This doc §5 (cluster map); per-pattern closure in `checklist.md` §A–§M.                                                                                              |
-| N.5  | At least one team member with explicit security role      | OPEN: Who is the named security lead, in writing? Currently the operator is also the reviewer — this doubles as the v1 root cause (`security-review-process.md` §1 and §3.7).                                                                                                                                            |
+| N.5  | At least one team member with explicit security role      | CLOSED: Named security lead is Tim Olson (`tim@dexorder.com`), recorded in `SECURITY.md` "Security lead" section. Single point of contact for vulnerability reports, audit coordination, and incident response. See §11.N5 below.                                                                                       |
 | N.6  | Hardware keys for production                              | OPEN: Does the operator key hold on a hardware device (Ledger / Trezor / equivalent)? Repo evidence: none.                                                                                                                                                                                                               |
 | N.7  | Multisig / multi-human key management                     | OPEN: Is the planner-owner / pool-owner address a multisig (e.g. Safe)? Repo evidence: deployment scripts use a single EOA (`script/DeployEthereum.sol:19` in v1). No Safe / module references in `src/` or `script/`.                                                                                                   |
 | N.8  | Key invariants defined and tested on every commit         | OPEN: I-1..I-18 + C-1..C-4 are in `forge test` (`tooling-runbook.md` §O.5 marks the suite "live"), but no `.github/workflows/*.yml` exists. CI gating is asserted in `tooling-runbook.md` §O.5 ("CI runs the full suite on every PR") but the workflow file is not in-tree. Action: wire a CI workflow before v1 deploy. |
@@ -365,11 +365,12 @@ as the operator's policy of record. Re-visit and update at each major release.
 _Question:_ Is there a named team member with explicit responsibility for
 security review, separate from the contract author?
 
-**Answer (2026-05-10): OPEN.** No named lead at this time. Review remains
-author-driven; this is the single highest-leverage organizational gap and is
-the explicit motivation for the paid-external-audit gate at N.10. Until N.10
-is met, the mitigation is process — the structured checklist + matrix +
-threat-model review documented across `doc/security/`.
+**Answer (closed): Tim Olson (`tim@dexorder.com`).** Recorded in
+`SECURITY.md` "Security lead" section as the single point of contact for
+vulnerability reports, audit coordination, and incident response. Acts as
+the named operator-side security owner; supplemented by the structured
+checklist + matrix + threat-model review documented across `doc/security/`
+and the scheduled paid external audit at the N.10 trigger.
 
 ### N.6 — Hardware keys
 
@@ -486,8 +487,8 @@ cap lifts after the window completes with no critical reports.
 
 ### Status snapshot (cross-references checklist.md §N)
 
-- **DOCUMENTED in this doc:** N.1, N.2, N.3, N.4, N.12.
+- **DOCUMENTED in this doc:** N.1, N.2, N.3, N.4, N.5, N.12.
 - **KNOWN (recorded above):** N.6, N.11.
 - **OK (CI live):** N.8, N.9 (`.github/workflows/ci.yml`).
 - **DEFERRED (recorded above with trigger):** N.7 (multisig), N.10 (audit).
-- **OPEN (no action recorded):** N.5 (security lead), launch posture.
+- **OPEN (no action recorded):** launch posture.
