@@ -1,5 +1,11 @@
 # Security Policy
 
+## Security lead
+
+Tim Olson — [tim@dexorder.com](mailto:tim@dexorder.com). Single point of
+contact for vulnerability reports, audit coordination, and incident
+response.
+
 ## Reporting a vulnerability
 
 If you believe you have found a security vulnerability in the Liquidity Party
