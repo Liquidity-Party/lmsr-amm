@@ -241,45 +241,6 @@ contract GasTest is Test {
         return newPool;
     }
 
-    /// @notice Helper to create a pool with the stable-pair optimization enabled
-    function createPoolStable(uint256 numTokens) internal returns (IPartyPool pool) {
-        // Deploy _tokens dynamically
-        address[] memory tokens = new address[](numTokens);
-        uint256[] memory bases = new uint256[](numTokens);
-
-        for (uint256 i = 0; i < numTokens; i++) {
-            string memory name = string(abi.encodePacked("T", vm.toString(i)));
-            TestERC20 token = new TestERC20(name, name, 0);
-            tokens[i] = address(token);
-            bases[i] = BASE;
-
-            // Mint initial balances for pool initialization and test users
-            token.mint(address(this), INIT_BAL);
-            token.mint(address(harness), INIT_BAL);
-            token.mint(alice, INIT_BAL);
-            token.mint(bob, INIT_BAL);
-        }
-
-        // Deploy pool with a small fee to test fee-handling paths (use 1000 ppm = 0.1%)
-        uint256 feePpm = 1000;
-        string memory poolName = string(abi.encodePacked("LPs", vm.toString(numTokens)));
-        // Note the final 'true' arg to activate stable-pair optimization path
-        IERC20[] memory ierc20Tokens = new IERC20[](tokens.length);
-        for (uint i = 0; i < tokens.length; i++) {
-            ierc20Tokens[i] = IERC20(tokens[i]);
-        }
-        int128 computedKappa = LMSRStabilized.computeKappaFromSlippage(ierc20Tokens.length, tradeFrac, targetSlippage);
-
-        uint256[] memory initialBalances = new uint256[](numTokens);
-        for (uint256 i = 0; i < numTokens; i++) {
-            initialBalances[i] = INIT_BAL;
-            ierc20Tokens[i].approve(address(planner), INIT_BAL);
-        }
-        vm.prank(planner.owner());
-        (pool, ) = planner.newPool(poolName, poolName, ierc20Tokens, computedKappa, feePpm, feePpm,
-            address(this), address(this), initialBalances, 0, 0);
-    }
-
     function setUp() public {
         alice = address(0xA11ce);
         bob = address(0xB0b);
@@ -413,30 +374,6 @@ contract GasTest is Test {
     /// @notice Gas measurement: perform 10 swaps back-and-forth between first two _tokens in the 100-token pool.
     function testSwapGasFifty() public {
         _performSwapGasTest(pool50);
-    }
-
-    /// @notice Gas measurement: perform 10 swaps back-and-forth on a 2-token stable pair (stable-path enabled)
-    function testSwapGasStablePair() public {
-        IPartyPool stablePair = createPoolStable(2);
-        _performSwapGasTest(stablePair);
-    }
-
-    /// @notice Gas measurement: perform 10 swaps back-and-forth on a 2-token stable pair (stable-path enabled)
-    function testSwapGasPrefundingSP() public {
-        IPartyPool stablePair = createPoolStable(2);
-        _performSwapGasTest(stablePair, IPartySwapCallback.liquidityPartySwapCallback.selector);
-    }
-
-    /// @notice Gas-style test: alternate swapMint then burnSwap on a 2-token stable pair
-    function testSwapMintBurnSwapGasStablePair() public {
-        IPartyPool stablePair = createPoolStable(2);
-        _performSwapMintBurnSwapGasTest(stablePair);
-    }
-
-    /// @notice Combined gas test (mint then burn) on 2-token stable pair using mint() and burn().
-    function testMintBurnGasStablePair() public {
-        IPartyPool stablePair = createPoolStable(2);
-        _performMintBurnGasTest(stablePair);
     }
 
     /// @notice Helper function: alternate swapMint then burnSwap to keep pool size roughly stable.

@@ -27,10 +27,10 @@ Naturally multi-asset, Liquidity Party altcoin pools provide direct, one-hop swa
 
 | Assets | Pairs | Swap Gas |  Mint Gas | Swap-Mint Gas |
 | -----: | ----: | -------: | --------: | ------------: |
-|      2 |     1 |  127,000 |   144,000 |       150,000 |
-|     10 |    45 |  139,000 |   412,000 |       370,000 |
-|     20 |   190 |  154,000 |   746,000 |       694,000 |
-|     50 |  1225 |  199,000 | 1,751,000 |     2,000,000 |
+|      2 |     1 |  138,000 |   140,000 |       146,000 |
+|     10 |    45 |  150,000 |   397,000 |       362,000 |
+|     20 |   190 |  165,000 |   717,000 |       681,000 |
+|     50 |  1225 |  210,000 | 1,680,000 |     1,980,000 |
 
 Liquidity Party aggregates scarce, low market cap assets into a single pool, providing one-hop liquidity for exotic pairs without fragmenting LP assets. CP pools would need 190x the LP assets to provide the same pairwise liquidity as a single 20-asset Liquidity Party pool, due to asset fragmentation.
 
