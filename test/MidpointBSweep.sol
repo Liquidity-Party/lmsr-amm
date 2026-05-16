@@ -18,7 +18,7 @@ import "../src/LMSRKernel.sol";
 /// Correctness check at the end confirms midpoint-b matches the existing
 /// LSLMSR bisection prototype (`swapAmountsForExactInput_LSLMSR`) to within bps
 /// on a symmetric pool.
-contract MidpointBSwapGas is Test {
+contract MidpointBSweep is Test {
     using ABDKMath64x64 for int128;
     using LMSRKernel for LMSRKernel.State;
 
@@ -31,7 +31,7 @@ contract MidpointBSwapGas is Test {
 
     // Pool fixtures
     int128 internal kappa20pct; // κ = 0.2
-    int128 internal kappa1pct;  // κ = 0.01 (worst-case low-κ pool)
+    int128 internal kappa1pct; // κ = 0.01 (worst-case low-κ pool)
     int128[10] internal q10;
     int128 internal sumQ10;
 
@@ -39,7 +39,7 @@ contract MidpointBSwapGas is Test {
 
     function setUp() public {
         kappa20pct = ABDKMath64x64.divu(2, 10);
-        kappa1pct  = ABDKMath64x64.divu(1, 100);
+        kappa1pct = ABDKMath64x64.divu(1, 100);
 
         int128 v = ABDKMath64x64.fromUInt(1_000_000);
         sumQ10 = int128(0);
@@ -58,7 +58,11 @@ contract MidpointBSwapGas is Test {
     // Inlined Hanson formula (mirror of LMSRKernel.swapAmountsForExactInput @ 143)
     // ------------------------------------------------------------------
 
-    function _hansonY(int128 b, int128 r0, int128 a) internal pure returns (int128) {
+    function _hansonY(
+        int128 b,
+        int128 r0,
+        int128 a
+    ) internal pure returns (int128) {
         int128 invB = ONE.div(b);
         int128 aOverB = a.mul(invB);
         // EXP_LIMIT check elided for benchmark; production code keeps it.
@@ -96,7 +100,7 @@ contract MidpointBSwapGas is Test {
         int128 y0 = _hansonY(b, r0, a);
 
         // Pass 2: Hanson at midpoint b = κ·(S + (a − y0)/2)
-        int128 sizeMid = sizeMetric.add(a.sub(y0) >> 1);  // /2 via shift on Q64.64
+        int128 sizeMid = sizeMetric.add(a.sub(y0) >> 1); // /2 via shift on Q64.64
         int128 bMid = kappa.mul(sizeMid);
         int128 invBMid = ONE.div(bMid);
         int128 r0Mid = ABDKMath64x64.exp(qJ.sub(qI).mul(invBMid));
@@ -217,7 +221,13 @@ contract MidpointBSwapGas is Test {
         int128 qJ = q10[1];
         int128 result;
         for (uint i = 0; i < N_ITERS; i++) {
-            result = _swapMidpoint1_TaylorR0Corrected(kappa20pct, sumQ10, qI, qJ, a);
+            result = _swapMidpoint1_TaylorR0Corrected(
+                kappa20pct,
+                sumQ10,
+                qI,
+                qJ,
+                a
+            );
         }
         sink = result;
     }
@@ -267,10 +277,20 @@ contract MidpointBSwapGas is Test {
     function test_inlined_matches_library() public view {
         int128 a = q10[0] >> 7;
         int128 inlinedY = _swapMidpoint1(kappa20pct, sumQ10, q10[0], q10[1], a);
-        (, int128 libY) = LMSRKernel.swapAmountsForExactInput(kappa20pct, _q10Array(), 0, 1, a);
+        (, int128 libY) = LMSRKernel.swapAmountsForExactInput(
+            kappa20pct,
+            _q10Array(),
+            0,
+            1,
+            a
+        );
         // Allow 1 ulp diff for fixed-point ops
         int128 diff = inlinedY > libY ? inlinedY - libY : libY - inlinedY;
-        assertLt(uint256(int256(diff)), 4, "inlined midpoint must match library");
+        assertLt(
+            uint256(int256(diff)),
+            4,
+            "inlined midpoint must match library"
+        );
     }
 
     /// Sanity: midpoint result is strictly greater than pre-state Hanson, and the
@@ -278,7 +298,7 @@ contract MidpointBSwapGas is Test {
     /// returns from further iteration on a symmetric pool).
     function test_midpoint_monotonicity() public {
         int128 a = q10[0] >> 7;
-        int128 yH  = _swapHanson(kappa20pct, sumQ10, q10[0], q10[1], a);
+        int128 yH = _swapHanson(kappa20pct, sumQ10, q10[0], q10[1], a);
         int128 yM1 = _swapMidpoint1(kappa20pct, sumQ10, q10[0], q10[1], a);
         int128 yM2 = _swapMidpoint2(kappa20pct, sumQ10, q10[0], q10[1], a);
         assertGt(yM1, yH, "midpoint1 > hanson (lower bound)");
@@ -288,8 +308,11 @@ contract MidpointBSwapGas is Test {
         // ratio = |Δ| / yM1 — expect ≪ 1 bps on symmetric pool
         int128 ratioBps = deltaM2.mul(ABDKMath64x64.fromUInt(10000)).div(yM1);
         emit log_named_int("|M2-M1|/M1 (Q64.64 bps)", ratioBps);
-        assertLt(uint256(int256(ratioBps)), uint256(int256(ABDKMath64x64.divu(1, 1000))),
-                 "M2 vs M1 within 0.001 bps");
+        assertLt(
+            uint256(int256(ratioBps)),
+            uint256(int256(ABDKMath64x64.divu(1, 1000))),
+            "M2 vs M1 within 0.001 bps"
+        );
         // Cap: must not exceed q_j
         assertLt(yM2, q10[1], "below q_j cap");
     }
@@ -308,7 +331,10 @@ contract MidpointBSwapGas is Test {
 
     /// Inventory-convention LMSR cost: C(q) = -b · ln(Σ exp(-q_k / b)).
     /// Uses log-sum-exp recentering for numerical stability.
-    function _costInventory(int128 b, int128[] memory q) internal pure returns (int128) {
+    function _costInventory(
+        int128 b,
+        int128[] memory q
+    ) internal pure returns (int128) {
         int128 invB = ONE.div(b);
         // M = max(-q_k / b)
         int128 M = q[0].neg().mul(invB);
@@ -354,12 +380,15 @@ contract MidpointBSwapGas is Test {
         for (uint256 it = 0; it < 80; it++) {
             int128 mid = (lo + hi) >> 1;
             qAfter[j] = q[j].sub(mid);
-            if (qAfter[j] <= int128(0)) { hi = mid; continue; }
+            if (qAfter[j] <= int128(0)) {
+                hi = mid;
+                continue;
+            }
             int128 b_post = kappa.mul(_sumArr(qAfter));
             int128 C_new = _costInventory(b_post, qAfter);
             // C is increasing in y; if C_new still < target, grow y.
             if (C_new < C0) lo = mid;
-            else            hi = mid;
+            else hi = mid;
         }
         return lo;
     }
@@ -380,7 +409,7 @@ contract MidpointBSwapGas is Test {
         int128 sizeM = ABDKMath64x64.fromUInt(N);
 
         int128 yMid = _swapMidpoint1(kappa, sizeM, q[0], q[1], a);
-        int128 yLS  = _bisectLS_inv_stateDep(kappa, q, 0, 1, a);
+        int128 yLS = _bisectLS_inv_stateDep(kappa, q, 0, 1, a);
 
         // Allow ~1e-10 absolute tolerance (≪ 0.0001 bps for any reasonable y).
         int128 tol = ABDKMath64x64.divu(1, 10_000_000_000);
@@ -391,7 +420,9 @@ contract MidpointBSwapGas is Test {
             emit log_named_int("y_midpoint (Q64.64)", yMid);
             emit log_named_int("y_LS_LMSR  (Q64.64)", yLS);
             emit log_named_int("excess (Q64.64)", yMid - yLS);
-            int128 bps = (yMid - yLS).mul(ABDKMath64x64.fromUInt(10000)).div(yLS);
+            int128 bps = (yMid - yLS).mul(ABDKMath64x64.fromUInt(10000)).div(
+                yLS
+            );
             emit log_named_int("excess (bps Q64.64)", bps);
         }
         assertLe(yMid, limit, label);
@@ -404,83 +435,83 @@ contract MidpointBSwapGas is Test {
         // a/q ∈ {0.0001, 0.001, 0.01, 0.05, 0.1}
         // N ∈ {2, 5, 10, 50, 100}
 
-        int128 k_e4   = ABDKMath64x64.divu(1, 10000); // 0.0001
-        int128 k_e3   = ABDKMath64x64.divu(1, 1000);  // 0.001
-        int128 k_0005 = ABDKMath64x64.divu(5,  1000);
-        int128 k_005  = ABDKMath64x64.divu(5,  100);
-        int128 k_02   = ABDKMath64x64.divu(2,  10);
-        int128 k_10   = ABDKMath64x64.fromUInt(1);
-        int128 k_20   = ABDKMath64x64.fromUInt(2);
+        int128 k_e4 = ABDKMath64x64.divu(1, 10000); // 0.0001
+        int128 k_e3 = ABDKMath64x64.divu(1, 1000); // 0.001
+        int128 k_0005 = ABDKMath64x64.divu(5, 1000);
+        int128 k_005 = ABDKMath64x64.divu(5, 100);
+        int128 k_02 = ABDKMath64x64.divu(2, 10);
+        int128 k_10 = ABDKMath64x64.fromUInt(1);
+        int128 k_20 = ABDKMath64x64.fromUInt(2);
 
-        int128 a_e4  = ABDKMath64x64.divu(1, 10000);
-        int128 a_e3  = ABDKMath64x64.divu(1, 1000);
-        int128 a_e2  = ABDKMath64x64.divu(1, 100);
+        int128 a_e4 = ABDKMath64x64.divu(1, 10000);
+        int128 a_e3 = ABDKMath64x64.divu(1, 1000);
+        int128 a_e2 = ABDKMath64x64.divu(1, 100);
         int128 a_5e2 = ABDKMath64x64.divu(5, 100);
         int128 a_1e1 = ABDKMath64x64.divu(1, 10);
 
         // N = 2
-        _assertNoOvershoot(k_e4,  2, a_e3,  "N=2 k=0.0001 a/q=1e-3");
-        _assertNoOvershoot(k_e4,  2, a_e2,  "N=2 k=0.0001 a/q=1e-2");
-        _assertNoOvershoot(k_e4,  2, a_5e2, "N=2 k=0.0001 a/q=5e-2");
-        _assertNoOvershoot(k_e3,  2, a_e3,  "N=2 k=0.001  a/q=1e-3");
-        _assertNoOvershoot(k_e3,  2, a_e2,  "N=2 k=0.001  a/q=1e-2");
-        _assertNoOvershoot(k_e3,  2, a_5e2, "N=2 k=0.001  a/q=5e-2");
-        _assertNoOvershoot(k_005, 2, a_e3,  "N=2 k=0.05 a/q=1e-3");
-        _assertNoOvershoot(k_005, 2, a_e2,  "N=2 k=0.05 a/q=1e-2");
+        _assertNoOvershoot(k_e4, 2, a_e3, "N=2 k=0.0001 a/q=1e-3");
+        _assertNoOvershoot(k_e4, 2, a_e2, "N=2 k=0.0001 a/q=1e-2");
+        _assertNoOvershoot(k_e4, 2, a_5e2, "N=2 k=0.0001 a/q=5e-2");
+        _assertNoOvershoot(k_e3, 2, a_e3, "N=2 k=0.001  a/q=1e-3");
+        _assertNoOvershoot(k_e3, 2, a_e2, "N=2 k=0.001  a/q=1e-2");
+        _assertNoOvershoot(k_e3, 2, a_5e2, "N=2 k=0.001  a/q=5e-2");
+        _assertNoOvershoot(k_005, 2, a_e3, "N=2 k=0.05 a/q=1e-3");
+        _assertNoOvershoot(k_005, 2, a_e2, "N=2 k=0.05 a/q=1e-2");
         _assertNoOvershoot(k_005, 2, a_5e2, "N=2 k=0.05 a/q=5e-2");
-        _assertNoOvershoot(k_02,  2, a_e3,  "N=2 k=0.2  a/q=1e-3");
-        _assertNoOvershoot(k_02,  2, a_e2,  "N=2 k=0.2  a/q=1e-2");
-        _assertNoOvershoot(k_02,  2, a_5e2, "N=2 k=0.2  a/q=5e-2");
-        _assertNoOvershoot(k_02,  2, a_1e1, "N=2 k=0.2  a/q=1e-1");
-        _assertNoOvershoot(k_10,  2, a_5e2, "N=2 k=1.0  a/q=5e-2");
-        _assertNoOvershoot(k_20,  2, a_1e1, "N=2 k=2.0  a/q=1e-1");
+        _assertNoOvershoot(k_02, 2, a_e3, "N=2 k=0.2  a/q=1e-3");
+        _assertNoOvershoot(k_02, 2, a_e2, "N=2 k=0.2  a/q=1e-2");
+        _assertNoOvershoot(k_02, 2, a_5e2, "N=2 k=0.2  a/q=5e-2");
+        _assertNoOvershoot(k_02, 2, a_1e1, "N=2 k=0.2  a/q=1e-1");
+        _assertNoOvershoot(k_10, 2, a_5e2, "N=2 k=1.0  a/q=5e-2");
+        _assertNoOvershoot(k_20, 2, a_1e1, "N=2 k=2.0  a/q=1e-1");
 
         // N = 5
-        _assertNoOvershoot(k_e4,  5, a_e3,  "N=5 k=0.0001 a/q=1e-3");
-        _assertNoOvershoot(k_e4,  5, a_e2,  "N=5 k=0.0001 a/q=1e-2");
-        _assertNoOvershoot(k_e3,  5, a_e3,  "N=5 k=0.001  a/q=1e-3");
-        _assertNoOvershoot(k_e3,  5, a_e2,  "N=5 k=0.001  a/q=1e-2");
-        _assertNoOvershoot(k_005, 5, a_e2,  "N=5 k=0.05 a/q=1e-2");
-        _assertNoOvershoot(k_02,  5, a_e2,  "N=5 k=0.2  a/q=1e-2");
-        _assertNoOvershoot(k_02,  5, a_5e2, "N=5 k=0.2  a/q=5e-2");
-        _assertNoOvershoot(k_10,  5, a_5e2, "N=5 k=1.0  a/q=5e-2");
+        _assertNoOvershoot(k_e4, 5, a_e3, "N=5 k=0.0001 a/q=1e-3");
+        _assertNoOvershoot(k_e4, 5, a_e2, "N=5 k=0.0001 a/q=1e-2");
+        _assertNoOvershoot(k_e3, 5, a_e3, "N=5 k=0.001  a/q=1e-3");
+        _assertNoOvershoot(k_e3, 5, a_e2, "N=5 k=0.001  a/q=1e-2");
+        _assertNoOvershoot(k_005, 5, a_e2, "N=5 k=0.05 a/q=1e-2");
+        _assertNoOvershoot(k_02, 5, a_e2, "N=5 k=0.2  a/q=1e-2");
+        _assertNoOvershoot(k_02, 5, a_5e2, "N=5 k=0.2  a/q=5e-2");
+        _assertNoOvershoot(k_10, 5, a_5e2, "N=5 k=1.0  a/q=5e-2");
 
         // N = 10
-        _assertNoOvershoot(k_e4,   10, a_e3, "N=10 k=0.0001 a/q=1e-3");
-        _assertNoOvershoot(k_e4,   10, a_e2, "N=10 k=0.0001 a/q=1e-2");
-        _assertNoOvershoot(k_e3,   10, a_e3, "N=10 k=0.001  a/q=1e-3");
-        _assertNoOvershoot(k_e3,   10, a_e2, "N=10 k=0.001  a/q=1e-2");
+        _assertNoOvershoot(k_e4, 10, a_e3, "N=10 k=0.0001 a/q=1e-3");
+        _assertNoOvershoot(k_e4, 10, a_e2, "N=10 k=0.0001 a/q=1e-2");
+        _assertNoOvershoot(k_e3, 10, a_e3, "N=10 k=0.001  a/q=1e-3");
+        _assertNoOvershoot(k_e3, 10, a_e2, "N=10 k=0.001  a/q=1e-2");
         _assertNoOvershoot(k_0005, 10, a_e3, "N=10 k=0.005 a/q=1e-3");
-        _assertNoOvershoot(k_005,  10, a_e3, "N=10 k=0.05  a/q=1e-3");
-        _assertNoOvershoot(k_005,  10, a_e2, "N=10 k=0.05  a/q=1e-2");
-        _assertNoOvershoot(k_02,   10, a_e4, "N=10 k=0.2   a/q=1e-4");
-        _assertNoOvershoot(k_02,   10, a_e2, "N=10 k=0.2   a/q=1e-2");
-        _assertNoOvershoot(k_02,   10, a_5e2,"N=10 k=0.2   a/q=5e-2");
-        _assertNoOvershoot(k_10,   10, a_5e2,"N=10 k=1.0   a/q=5e-2");
-        _assertNoOvershoot(k_20,   10, a_1e1,"N=10 k=2.0   a/q=1e-1");
+        _assertNoOvershoot(k_005, 10, a_e3, "N=10 k=0.05  a/q=1e-3");
+        _assertNoOvershoot(k_005, 10, a_e2, "N=10 k=0.05  a/q=1e-2");
+        _assertNoOvershoot(k_02, 10, a_e4, "N=10 k=0.2   a/q=1e-4");
+        _assertNoOvershoot(k_02, 10, a_e2, "N=10 k=0.2   a/q=1e-2");
+        _assertNoOvershoot(k_02, 10, a_5e2, "N=10 k=0.2   a/q=5e-2");
+        _assertNoOvershoot(k_10, 10, a_5e2, "N=10 k=1.0   a/q=5e-2");
+        _assertNoOvershoot(k_20, 10, a_1e1, "N=10 k=2.0   a/q=1e-1");
 
         // N = 50 (large pool)
-        _assertNoOvershoot(k_e4,   50, a_e3, "N=50 k=0.0001 a/q=1e-3");
-        _assertNoOvershoot(k_e4,   50, a_e2, "N=50 k=0.0001 a/q=1e-2");
-        _assertNoOvershoot(k_e3,   50, a_e3, "N=50 k=0.001  a/q=1e-3");
-        _assertNoOvershoot(k_e3,   50, a_e2, "N=50 k=0.001  a/q=1e-2");
-        _assertNoOvershoot(k_02,   50, a_e3, "N=50 k=0.2  a/q=1e-3");
-        _assertNoOvershoot(k_02,   50, a_e2, "N=50 k=0.2  a/q=1e-2");
-        _assertNoOvershoot(k_02,   50, a_5e2,"N=50 k=0.2  a/q=5e-2");
-        _assertNoOvershoot(k_10,   50, a_1e1,"N=50 k=1.0  a/q=1e-1");
+        _assertNoOvershoot(k_e4, 50, a_e3, "N=50 k=0.0001 a/q=1e-3");
+        _assertNoOvershoot(k_e4, 50, a_e2, "N=50 k=0.0001 a/q=1e-2");
+        _assertNoOvershoot(k_e3, 50, a_e3, "N=50 k=0.001  a/q=1e-3");
+        _assertNoOvershoot(k_e3, 50, a_e2, "N=50 k=0.001  a/q=1e-2");
+        _assertNoOvershoot(k_02, 50, a_e3, "N=50 k=0.2  a/q=1e-3");
+        _assertNoOvershoot(k_02, 50, a_e2, "N=50 k=0.2  a/q=1e-2");
+        _assertNoOvershoot(k_02, 50, a_5e2, "N=50 k=0.2  a/q=5e-2");
+        _assertNoOvershoot(k_10, 50, a_1e1, "N=50 k=1.0  a/q=1e-1");
 
         // N = 100 (very large pool)
-        _assertNoOvershoot(k_e4,   100, a_e3, "N=100 k=0.0001 a/q=1e-3");
-        _assertNoOvershoot(k_e4,   100, a_e2, "N=100 k=0.0001 a/q=1e-2");
-        _assertNoOvershoot(k_e3,   100, a_e3, "N=100 k=0.001  a/q=1e-3");
-        _assertNoOvershoot(k_e3,   100, a_e2, "N=100 k=0.001  a/q=1e-2");
+        _assertNoOvershoot(k_e4, 100, a_e3, "N=100 k=0.0001 a/q=1e-3");
+        _assertNoOvershoot(k_e4, 100, a_e2, "N=100 k=0.0001 a/q=1e-2");
+        _assertNoOvershoot(k_e3, 100, a_e3, "N=100 k=0.001  a/q=1e-3");
+        _assertNoOvershoot(k_e3, 100, a_e2, "N=100 k=0.001  a/q=1e-2");
         _assertNoOvershoot(k_0005, 100, a_e3, "N=100 k=0.005 a/q=1e-3");
-        _assertNoOvershoot(k_005,  100, a_e3, "N=100 k=0.05  a/q=1e-3");
-        _assertNoOvershoot(k_02,   100, a_e3, "N=100 k=0.2   a/q=1e-3");
-        _assertNoOvershoot(k_02,   100, a_e2, "N=100 k=0.2   a/q=1e-2");
-        _assertNoOvershoot(k_02,   100, a_5e2,"N=100 k=0.2   a/q=5e-2");
-        _assertNoOvershoot(k_10,   100, a_5e2,"N=100 k=1.0   a/q=5e-2");
-        _assertNoOvershoot(k_20,   100, a_1e1,"N=100 k=2.0   a/q=1e-1");
+        _assertNoOvershoot(k_005, 100, a_e3, "N=100 k=0.05  a/q=1e-3");
+        _assertNoOvershoot(k_02, 100, a_e3, "N=100 k=0.2   a/q=1e-3");
+        _assertNoOvershoot(k_02, 100, a_e2, "N=100 k=0.2   a/q=1e-2");
+        _assertNoOvershoot(k_02, 100, a_5e2, "N=100 k=0.2   a/q=5e-2");
+        _assertNoOvershoot(k_10, 100, a_5e2, "N=100 k=1.0   a/q=5e-2");
+        _assertNoOvershoot(k_20, 100, a_1e1, "N=100 k=2.0   a/q=1e-1");
     }
 
     /// Asymmetric-pool case: q drifts. Tests Taylor variants' divergence regime
@@ -493,7 +524,7 @@ contract MidpointBSwapGas is Test {
         uint256 N = 5;
         int128[] memory q = new int128[](N);
         q[0] = ABDKMath64x64.divu(15, 10); // 1.5
-        q[1] = ABDKMath64x64.divu(7,  10); // 0.7
+        q[1] = ABDKMath64x64.divu(7, 10); // 0.7
         for (uint k = 2; k < N; k++) q[k] = ONE;
         int128 sizeM = _sumArr(q);
         int128 kappa = ABDKMath64x64.divu(2, 10);
@@ -509,15 +540,33 @@ contract MidpointBSwapGas is Test {
 
             int128 yMid = _swapMidpoint1(kappa, sizeM, q[0], q[1], a);
             int128 yTay = _swapMidpoint1_TaylorR0(kappa, sizeM, q[0], q[1], a);
-            int128 yTayC = _swapMidpoint1_TaylorR0Corrected(kappa, sizeM, q[0], q[1], a);
+            int128 yTayC = _swapMidpoint1_TaylorR0Corrected(
+                kappa,
+                sizeM,
+                q[0],
+                q[1],
+                a
+            );
             int128 yLS = _bisectLS_inv_stateDep(kappa, q, 0, 1, a);
 
             int128 tol = ABDKMath64x64.divu(1, 10_000_000_000);
             int128 limit = yLS.add(tol);
 
-            assertLe(yMid,  limit, "midpoint full overshoots LS-LMSR on asymmetric pool");
-            assertLe(yTay,  limit, "Taylor reuse-r0 overshoots LS-LMSR on asymmetric pool");
-            assertLe(yTayC, limit, "Taylor r0 corrected overshoots LS-LMSR on asymmetric pool");
+            assertLe(
+                yMid,
+                limit,
+                "midpoint full overshoots LS-LMSR on asymmetric pool"
+            );
+            assertLe(
+                yTay,
+                limit,
+                "Taylor reuse-r0 overshoots LS-LMSR on asymmetric pool"
+            );
+            assertLe(
+                yTayC,
+                limit,
+                "Taylor r0 corrected overshoots LS-LMSR on asymmetric pool"
+            );
         }
     }
 
