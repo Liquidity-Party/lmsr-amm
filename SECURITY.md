@@ -27,7 +27,7 @@ fix is in place.
 
 ## What to expect
 
-- Acknowledgement within 24 hours.
+- Acknowledgement within 48 hours.
 - A coordinated disclosure timeline tailored to severity.
 - Public credit at your option once the issue is mitigated.
 

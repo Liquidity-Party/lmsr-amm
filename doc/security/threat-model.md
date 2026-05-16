@@ -279,7 +279,8 @@ The signals the operator monitors continuously:
   `uninitialized-storage`, `unprotected-upgrade`, `unchecked-transfer`) is
   triaged within 24 h.
 - **Invariant suite:** any red invariant in CI is a stop-the-line event.
-- **External reports:** see §11 N.11 (disclosure channel — currently OPEN).
+- **External reports:** see §11 N.11 (disclosure channel published in
+  `SECURITY.md`; 48 h acknowledgement target).
 
 ### 9.2 Triage
 
@@ -349,7 +350,7 @@ The signals the operator monitors continuously:
 | N.8  | Key invariants defined and tested on every commit         | OPEN: I-1..I-18 + C-1..C-4 are in `forge test` (`tooling-runbook.md` §O.5 marks the suite "live"), but no `.github/workflows/*.yml` exists. CI gating is asserted in `tooling-runbook.md` §O.5 ("CI runs the full suite on every PR") but the workflow file is not in-tree. Action: wire a CI workflow before v1 deploy. |
 | N.9  | Static analysis (Slither) in CI; no high-severity merges  | OPEN: `slither.config.json` exists but Slither is marked `deferred` in `tooling-runbook.md` §O.1 ("not installed in dev env at time of writing"). No CI workflow. Action: wire Slither in CI with a fail-on-high gate before v1 deploy.                                                                                  |
 | N.10 | External audit before mainnet                             | OPEN: Has a paid external audit (Spearbit / Cantina / Sherlock / Trail of Bits / OZ / boutique) been engaged for v1? Repo evidence: none. `security-review-process.md` §3.7 marks this non-negotiable for v1.                                                                                                            |
-| N.11 | Vulnerability disclosure / bug bounty channel             | OPEN: Is there a published disclosure email / `SECURITY.md` / Immunefi listing? Repo evidence: no `SECURITY.md` at root; no Immunefi link in `README.md`. Action: publish disclosure channel and (per `security-review-process.md` §3.8) consider Immunefi Boost for the TVL-capped launch window.                       |
+| N.11 | Vulnerability disclosure / bug bounty channel             | KNOWN: `SECURITY.md` at repo root names primary channels (`tim@dexorder.com` + DM to @LiquidityParty on X), 48 h acknowledgement target, scope and out-of-scope clauses. No formal bounty cap today; promotion to Immunefi Boost (per `security-review-process.md` §3.8) scheduled at the same TVL trigger as N.7 / N.10. See §11.N11.                  |
 | N.12 | User-abuse vectors considered (phishing, allowance scams) | DOCUMENTED                                                                                                                                                                                                                                                                                                               | `user-allowance-guidance.md` (closes §K.6); the document covers per-trade approvals, Permit2 preference, revocation hygiene, deterministic-CREATE2-allowance hazard. |
 
 ---
@@ -462,14 +463,14 @@ _Question:_ Is there a published disclosure channel (`SECURITY.md`,
 dedicated email, Immunefi listing) before mainnet v1 deploy? What is the
 target bounty cap and scope?
 
-**Answer (2026-05-10): YES, via X (Twitter) — primary channel
-@LiquidityParty.** Vulnerability reports are accepted via DM to the project
-account. No formal bug bounty cap is offered today; this is consistent with
-the deferred-audit posture (N.10).
+**Answer (closed): YES.** `SECURITY.md` at the repo root publishes the
+primary channels (`tim@dexorder.com` and DM to @LiquidityParty on X), a
+48-hour acknowledgement target, the disclosure SLA scaled to severity,
+the named security lead (Tim Olson, see N.5), scope, and out-of-scope
+clauses. No formal bug bounty cap is offered today; this is consistent
+with the deferred-audit posture (N.10).
 
-**Recorded plan:** add a `SECURITY.md` at the repo root pointing at the
-Twitter handle and stating "no formal bounty; please disclose responsibly"
-as a minimum. Promote to Immunefi Boost (per
+**Recorded plan:** promote to Immunefi Boost (per
 `security-review-process.md` §3.8) at the same TVL trigger as N.7 / N.10.
 
 ### Launch posture (per `security-review-process.md` §3.8 / §3.9)
