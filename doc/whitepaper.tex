@@ -214,19 +214,20 @@ accounts for the bases $\beta_i, \beta_j$.
 
 Let $i, j$ be the input and output asset indices and let $a$ be the
 fee-discounted internal input. The production swap kernel
-(\texttt{LMSRKernel.swapAmountsForExactInput}) computes the output $y$ via
-a two-pass Heun-style midpoint of the Hanson exact-input formula:
+(\texttt{LMSRKernel.\allowbreak swapAmountsForExactInput}) computes the
+output $y$ via a two-pass Heun-style midpoint of the Hanson exact-input
+formula. Writing $\tilde{b} := b_{\mathrm{mid}}$ and
+$\tilde{r} := r_{\mathrm{mid}}$ for the pass-1 quantities:
 
 \begin{align}
   &\textbf{Pass 0 (frozen pre-state $b$):} \nonumber\\
   &\qquad b_0 = \kappa\,\Sm,
-  \quad r_0 = \exp\!\big((q_j - q_i)/b_0\big), \nonumber\\
-  &\qquad y_0 = b_0 \,\ln\!\Big(1 + r_0\,\big(1 - e^{-a/b_0}\big)\Big), \\
+   \quad r_0 = \exp\!\big((q_j - q_i)/b_0\big), \nonumber\\
+  &\qquad y_0 = b_0 \,\ln\!\Big(1 + r_0\,\big(1 - e^{-a/b_0}\big)\Big). \\
   &\textbf{Pass 1 (midpoint $b$):} \nonumber\\
-  &\qquad b_{\mathrm{mid}} = \kappa\,\Big(\Sm + \tfrac{a - y_0}{2}\Big),
-  \quad r_{\mathrm{mid}} = \exp\!\big((q_j - q_i)/b_{\mathrm{mid}}\big),
-  \nonumber\\
-  &\qquad y = b_{\mathrm{mid}}\,\ln\!\Big(1 + r_{\mathrm{mid}}\,\big(1 - e^{-a/b_{\mathrm{mid}}}\big)\Big).
+  &\qquad \tilde{b} = \kappa\,\Big(\Sm + \tfrac{a - y_0}{2}\Big),
+   \quad \tilde{r} = \exp\!\big((q_j - q_i)/\tilde{b}\big), \nonumber\\
+  &\qquad y = \tilde{b}\,\ln\!\Big(1 + \tilde{r}\,\big(1 - e^{-a/\tilde{b}}\big)\Big).
 \end{align}
 
 The first pass freezes $b$ at the pre-swap size, producing a Hanson output
@@ -560,6 +561,23 @@ The protocol developers absorb the rounding loss on the protocol-share
 split; the LP keeps the residual. This is deliberate. Section
 \ref{sec:fees} specifies the fee mathematics this rounding policy applies
 to.
+
+\subsection{Correlated-Asset LVR Reduction (Conditional)}
+
+A structural LP benefit of the multi-asset LMSR geometry is a closed-form
+\emph{cross-correlation discount} on the loss-versus-rebalancing (LVR)
+rate (Olson \& Claude Opus, 2026, in-tree
+\texttt{doc/lvr-multiasset-lmsr.pdf}): the more correlated the pool's
+basket, the more the LMSR's shared-simplex coupling cancels the
+relative-mode arbitrage that bleeds value from separable bilateral
+CFMMs. For perfectly correlated equal-volatility baskets the
+relative-mode contribution vanishes entirely.
+
+This protection is \emph{conditional}: it is realized through pool
+composition, not enforced by the protocol on every pool, and a pool of
+uncorrelated assets does not receive it. The operator-side mechanics ---
+basket-selection criteria, the discount formula, and quantitative
+comparison of candidate compositions --- are in \S\ref{sec:token-selection}.
 
 \subsection{Admin-Side LP Protection}
 \label{sec:admin-risk}
@@ -932,12 +950,18 @@ in \texttt{doc/security/admin-powers.md}.
 The recommended end-to-end deployment workflow is:
 
 \begin{enumerate}
-  \item \textbf{Token vetting.} Run \texttt{bin/validate-token <addr>} against
-        every candidate token (see \texttt{doc/security/trusted-deployer-policy.md}
+  \item \textbf{Token vetting.} Run \texttt{bin/validate-token <addr>}
+        against every candidate token (see
+        \texttt{doc/\allowbreak security/\allowbreak trusted-deployer-policy.md}
         for the validator policy). Resolve every \texttt{WARN} off-chain;
         \texttt{FAIL} blocks listing. Cross-check with
         \texttt{slither-check-erc <addr> ERC20 --erc-conformance}. Record
         verifications in a listing record.
+  \item \textbf{Token-set composition.} Choose the basket of assets so the
+        pool sits in a low-LVR regime
+        (\S\ref{sec:token-selection})~--- prefer correlated assets, group
+        natural baskets, and avoid mixing high-volatility singletons with
+        otherwise correlated sets.
   \item \textbf{Parameter selection.} Choose $\kappa$ (\S\ref{sec:kappa}),
         per-asset fees, flash fee, and bases (\S\ref{sec:bases}).
   \item \textbf{Initial liquidity.} Fund the deployer with
@@ -952,6 +976,69 @@ The recommended end-to-end deployment workflow is:
         \texttt{balances()} match expectations. Subscribe to the
         \texttt{PartyStarted} event for the indexer.
 \end{enumerate}
+
+\subsection{Token-Selection Criteria: Correlated-Asset LVR Reduction}
+\label{sec:token-selection}
+
+The operator's choice of which tokens to bundle into a single pool is a
+first-class design lever, separate from the per-asset fee and $\kappa$
+calibration. The load-bearing criterion is correlation structure across
+the basket, because LMSR's multi-asset geometry exhibits a
+\emph{cross-correlation discount} on the loss-versus-rebalancing (LVR)
+rate that is absent from separable bilateral CFMMs.
+
+\paragraph{The discount.}
+Olson \& Claude Opus (2026, in-tree
+\texttt{doc/lvr-multiasset-lmsr.pdf}) derive the instantaneous LVR rate
+for the Hanson multi-asset LMSR in closed form. Writing $P_i$ for
+external prices of $N$ risky assets, $S = \sum_i P_i$, $b$ for the LMSR
+liquidity parameter, and $\Sigma$ for the return-covariance matrix, the
+rate decomposes as
+\[
+  \ell(P)
+    \;=\;
+    \underbrace{\tfrac{b}{2}\sum_i \sigma_i^2 P_i}_{\text{$N$ independent two-asset LMSR rates}}
+    \;-\;
+    \underbrace{\tfrac{b}{2(1 + S)} P^{\!\top}\!\Sigma P}_{\text{cross-correlation discount}}.
+\]
+The discount is non-negative for any positive-semidefinite $\Sigma$ and
+grows with the variance of the value-weighted basket return: the more
+correlated the basket, the more cross-correlation cancels relative-mode
+arbitrage. For perfectly correlated equal-volatility assets the
+relative-mode contribution vanishes entirely and an $(N{+}1)$-asset
+balanced pool collapses to the LVR of a single two-asset LMSR with
+matched $b$ and matched risky notional --- the multi-asset construction
+buys $N(N{-}1)/2$ pairwise quotes at the LVR cost of one. A pool of
+perfectly correlated assets with no num\'eraire has zero LVR.
+
+\paragraph{Operator implication.}
+Token selection should treat correlation as a primary criterion, not a
+secondary one. Concretely:
+\begin{itemize}
+  \item \textbf{Prefer correlated baskets.} A liquid-staking-ETH bundle
+        (stETH, rETH, ETH), a stablecoin bundle (USDC, USDT, DAI), a
+        wrapped-BTC bundle (wBTC, cbBTC, tBTC), or any
+        sector-correlated long-tail set will retain more value against
+        the same arbitrage pressure than the same tokens spread across
+        disjoint pairwise pools.
+  \item \textbf{Avoid mixing.} A single highly-volatile uncorrelated
+        asset inserted into an otherwise correlated basket re-introduces
+        the relative-mode LVR contribution between that asset and every
+        other slot; it is usually better to deploy the outlier in its
+        own pool (or pair) than to dilute the correlation benefit of the
+        surrounding basket.
+  \item \textbf{Group by num\'eraire vs.\ risky.} A no-num\'eraire pool
+        of correlated assets is the extreme of the discount; if a
+        num\'eraire is included, the common-mode num\'eraire term
+        dominates and the LVR floor is set by the basket-vs-num\'eraire
+        variance.
+\end{itemize}
+The LVR paper's closed-form decomposition gives the operator a
+quantitative tool to compare candidate baskets before deploying: compute
+$P^{\!\top}\!\Sigma P / (\sum_i \sigma_i^2 P_i)$ on a candidate
+composition, larger is better. The same calculation is the input to the
+$\kappa$ and $C$ calibration steps in
+\S\ref{sec:kappa}--\S\ref{sec:fee-calibration}.
 
 \subsection{Choosing $\kappa$}
 \label{sec:kappa}
