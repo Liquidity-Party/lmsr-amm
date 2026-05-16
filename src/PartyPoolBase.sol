@@ -60,8 +60,13 @@ abstract contract PartyPoolBase is OwnableInternal, ERC20Internal, ReentrancyGua
 
     /// @notice Set permanently to true on the first successful initialMint. Prevents reinitialization
     ///         (and the protocol-fee theft path) after a full burn drains totalSupply and the LMSR.
-    // Same delegatecall-init rationale as _fees (see above).
-    // slither-disable-next-line uninitialized-state
+    // Same delegatecall-init rationale as _fees (see above). Slither's `unused-state`
+    // and `constable-states` flags here are false positives caused by the same
+    // delegatecall-init pattern: PartyPoolMintImpl writes and reads `_initialized`
+    // via the `PoolState` storage layout (slot 8, packed with `_killed`), not via
+    // this contract's named storage variable. The slot MUST remain a runtime-mutable
+    // storage variable so the library can flip it on first mint.
+    // slither-disable-next-line uninitialized-state,unused-state,constable-states
     bool internal _initialized;
 
     // LMSR internal state

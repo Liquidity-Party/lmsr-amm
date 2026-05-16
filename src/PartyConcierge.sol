@@ -68,6 +68,16 @@ contract PartyConcierge is IPartySwapCallback {
     ///        1. Native wrap: token == pool.wrapperToken() and cbEthBudget covers it.
     ///        2. Permit2: cbMode == PERMIT2 — pull from _cbUser via Permit2 SignatureTransfer.
     ///        3. Default: safeTransferFrom from _cbUser, using their Concierge allowance.
+    //
+    // Slither flags the `_cbEthBudget -= amount` write happening after the NativeWrapper
+    // deposit{value:amount} call as cross-function reentrancy. False positive: the wrapper
+    // is a trusted WETH-style contract authorized at the planner level; the budget
+    // decrement is the standard cross-call accounting that prevents the SAME pool from
+    // double-spending the ETH budget across multiple callback invocations within one
+    // swap. The msg.sender == _cbPool check (line above) restricts entry to the active
+    // pool, and _beginCall's `_cbPool == address(0)` precondition prevents a fresh
+    // entry-point invocation while a swap is in flight.
+    // slither-disable-next-line reentrancy-eth
     function liquidityPartySwapCallback(bytes32, IERC20 token, uint256 amount, bytes memory cbData) external {
         require(msg.sender == _cbPool, "unauthorized callback");
 
@@ -280,6 +290,10 @@ contract PartyConcierge is IPartySwapCallback {
     /// @param permitNonce Permit2 nonce the user signed
     /// @param sigDeadline Permit2 signature deadline
     /// @param signature   Permit2 65-byte signature
+    // _cbPool/_cbUser are transient-storage in-flight flags: `_cbPool != 0` IS the
+    // reentrancy guard. Same justification as `swap()` above — the guard must remain
+    // set across the external pool call, and sweepEth runs AFTER _endCall.
+    // slither-disable-next-line reentrancy-eth,reentrancy-benign
     function swapPermit2(
         address payer,
         IPartyPool pool,
@@ -333,6 +347,8 @@ contract PartyConcierge is IPartySwapCallback {
 
     /// @notice Permit2-funded single-token mint (exact-LP-out).
     /// @dev `tokenIn` MUST be a real ERC20. `msg.value` is forbidden.
+    // Same transient-storage guard pattern as `swap()` / `swapPermit2()`.
+    // slither-disable-next-line reentrancy-eth,reentrancy-benign
     function swapMintPermit2(
         address payer,
         IPartyPool pool,

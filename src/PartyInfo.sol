@@ -311,6 +311,15 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
     }
 
     /// @inheritdoc IPartyInfo
+    // `lpHi = supply / 1_000_000` then later `next = lpHi * 2` (and the bisection mid)
+    // intentionally starts the doubling phase at 1 ppm of supply; the floor is
+    // desired (prevents quote_too_large reverts at the bottom of the search). The
+    // `calls-loop` flag covers `try this._quoteExternal(...)` inside the bisection,
+    // which is structurally required: try/catch only works on external calls, and
+    // the bisection MUST be able to catch quote reverts (β-too-large at the top of
+    // the bracket) to converge. Cyclomatic-complexity is informational and inherent
+    // to the two-phase doubling-then-bisection logic.
+    // slither-disable-next-line divide-before-multiply,calls-loop,cyclomatic-complexity
     function maxLpForBudget(
         IPartyPool pool,
         uint256 inputTokenIndex,
@@ -378,6 +387,12 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
         lpAmountOut = lpLo;
     }
 
+    // `this._quoteExternal` is called inside `maxLpForBudget`'s bisection loop.
+    // Structurally required: try/catch only works on external calls, and the
+    // bisection MUST be able to catch quote reverts (β too large at the top of
+    // the bracket) to converge. The call is to this contract — not a foreign
+    // contract — so the gas/reentrancy concerns behind `calls-loop` do not apply.
+    // slither-disable-next-line calls-loop
     function _quote(
         uint256 inputTokenIndex,
         uint256 lpAmountOut,
@@ -395,6 +410,12 @@ contract PartyInfo is PartyPoolHelpers, IPartyInfo {
     }
 
     /// @dev External wrapper to make `_quote` reverts catchable via try/catch.
+    // Leading underscore is intentional: this is a private helper that only needs
+    // external visibility so `_quote` can use try/catch (Solidity requires an
+    // external call to catch reverts). The unused-return warning is a slither
+    // misread of `return PartyPoolMintImpl.swapMintAmounts(...)` — the tuple IS
+    // forwarded to this function's named returns.
+    // slither-disable-next-line naming-convention,unused-return
     function _quoteExternal(
         uint256 inputTokenIndex,
         uint256 lpAmountOut,

@@ -176,6 +176,11 @@ library LMSRStabilized {
         // Two-pass midpoint-b: pass 0 evaluates Hanson at frozen pre-state b
         // (size = S), pass 1 re-evaluates at b_mid = κ·(S + (a−y0)/2); `>> 1` = /2 on Q64.64.
         int128 size = sizeMetric;
+        // Solidity zero-initializes `y`. The only path that exits without writing
+        // `y` (the `inner <= 0` cap-output branch) returns directly and never reads
+        // `y`. The post-loop read `if (y <= 0)` is only reached after pass 1 has
+        // assigned `y`. Explicit `= 0` would be redundant noise.
+        // slither-disable-next-line uninitialized-local
         int128 y;
         for (uint256 pass = 0; pass < 2; ) {
             int128 b = kappa.mul(size);
@@ -218,6 +223,10 @@ library LMSRStabilized {
     ///      y = q_j), bisection converges with yLow near q_j; the caller can treat
     ///      that as "output capped to available inventory". Convergence: 16 iters
     ///      of bisection in Q64.64.
+    // `_LSLMSR` suffix names the LS-LMSR (liquidity-sensitive) algorithm variant;
+    // this naming convention is intentional across the kernel surface to keep the
+    // two variants visually distinguishable at call sites.
+    // slither-disable-next-line naming-convention
     function swapAmountsForExactInput_LSLMSR(
         int128 kappa,
         int128[] memory qInternal,
@@ -616,6 +625,10 @@ library LMSRStabilized {
     /// @param alpha Proportional share to burn (0 < alpha <= 1)
     /// @return amountIn LP size-metric redeemed (alpha * S)
     /// @return amountOut Amount of asset i received (in 64.64 fixed-point)
+    // Cyclomatic complexity is inherent to the n-asset burn arithmetic: each
+    // asset leg has its own feasibility/rounding branches plus a final
+    // cap-and-solve-inverse path. Splitting would not simplify the algorithm.
+    // slither-disable-next-line cyclomatic-complexity
     function swapAmountsForBurn(
         int128 kappa,
         int128[] memory qInternal,
