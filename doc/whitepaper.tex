@@ -31,7 +31,7 @@
 \title{Liquidity Party\\
        \large A Multi-Asset Logarithmic Market Scoring Rule AMM\\
        \large Deployment Whitepaper}
-\author{Liquidity Party}
+\author{}
 \date{Draft --- \stub{Publication date}}
 
 \begin{document}
@@ -39,32 +39,28 @@
 
 \begin{abstract}
 Liquidity Party is a permissioned-deploy, non-upgradeable multi-asset
-automated market maker built for liquidity providers. Every rounding,
-approximation, and capacity decision in the system is biased strictly in
-favor of LPs: the swap kernel never pays a trader more than the true
-liquidity-sensitive LMSR mapping would, every Q64.64 primitive in the
-single-asset chains is wrapped with ceiling helpers that restore LP-favor
-where ABDK's default floor would leak a sub-ulp gift to the swapper, and
-every fee/protocol-share rounding decision rounds up for the pool and down
-for the protocol. The pricing kernel is the Logarithmic Market Scoring Rule
-(LMSR) with the liquidity parameter tied to pool size as $\bofq = \kappa\,\Sm$,
-giving a scale-invariant pool whose maximum LP loss is bounded by
-$\kappa\,\Sm\,\ln n$. Swaps execute against a two-pass midpoint-$b$
-approximation of the path-exact LS-LMSR cost function with a one-sided
-LP-safety guarantee (\S\ref{sec:lp-safety}); single-asset deposits
-(\texttt{swapMint}) and single-asset withdrawals (\texttt{burnSwap}) replicate
-the externally observable price path by composing the fee-free kernel against
-a mutating local state, eliminating the round-trip drift that frozen-$b$
-Hanson incurs. Pool parameters are immutable post-deployment; the only
-mutable admin lever on a live pool is the protocol-fee recipient and the
-irreversible \texttt{kill()} switch. The admin cannot mint LP, change fees,
-freeze users, or move pool reserves --- a leaked admin key presents little to
-no danger to LPs (\S\ref{sec:admin-risk}). Pool creation is restricted to the
-trusted operator, who is responsible for upstream token vetting via a
-documented validator pipeline. This document specifies the pricing kernel
-and liquidity operations, the production fee structure, the admin and
-deployment surface, and the security-review methodology applied prior to
-launch, all framed for an LP audience.
+automated market maker. The pricing kernel is the Logarithmic Market
+Scoring Rule (LMSR) with the liquidity parameter tied to pool size as
+$\bofq = \kappa\,\Sm$, giving a scale-invariant pool whose maximum LP loss
+is bounded by $\kappa\,\Sm\,\ln n$. Swaps execute against a two-pass
+midpoint-$b$ approximation of the path-exact LS-LMSR cost function with a
+one-sided LP-safety guarantee (\S\ref{sec:lp-safety}); single-asset
+deposits (\texttt{swapMint}) and single-asset withdrawals
+(\texttt{burnSwap}) replicate the externally observable price path by
+composing the fee-free kernel against a mutating local state, eliminating
+the round-trip drift that frozen-$b$ Hanson incurs. Pool parameters are
+immutable post-deployment; the only mutable admin levers on a live pool
+are the protocol-fee recipient and the irreversible \texttt{kill()}
+switch. The admin cannot mint LP, change fees, freeze users, or move pool
+reserves --- a leaked admin key presents little to no danger to LPs
+(\S\ref{sec:admin-risk}). Pool creation is restricted to the trusted
+operator, who is responsible for upstream token vetting via a documented
+validator pipeline. Where the implementation makes sub-ulp rounding
+choices, every choice is biased toward existing LPs and against takers
+and the protocol developers; the protocol's primary client is the LP.
+This document specifies the pricing kernel and liquidity operations, the
+production fee structure, the admin and deployment surface, and the
+security-review methodology applied prior to launch.
 \end{abstract}
 
 \tableofcontents
@@ -88,10 +84,10 @@ Table~\ref{tab:gas}.
 \toprule
 Assets & Pairs & Swap & Mint & \texttt{swapMint} \\
 \midrule
- 2 &    1 & 127{,}000 &   144{,}000 &   150{,}000 \\
-10 &   45 & 139{,}000 &   412{,}000 &   370{,}000 \\
-20 &  190 & 154{,}000 &   746{,}000 &   694{,}000 \\
-50 & 1225 & 199{,}000 & 1{,}751{,}000 & 2{,}000{,}000 \\
+ 2 &    1 & 138{,}000 &   140{,}000 &   146{,}000 \\
+10 &   45 & 150{,}000 &   397{,}000 &   362{,}000 \\
+20 &  190 & 165{,}000 &   717{,}000 &   681{,}000 \\
+50 & 1225 & 210{,}000 & 1{,}680{,}000 & 1{,}980{,}000 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -137,121 +133,24 @@ $q_i = \mathrm{balance}_i / \beta_i$.
 Liquidity Party's first concern is the LP. The protocol is engineered so
 that every decision the LP cannot make on their own behalf --- rounding,
 approximation, cap-and-invert branch selection, fee/protocol-share split,
-emergency response --- is biased in favor of the LP. Section
-\ref{sec:lp-protections} consolidates the explicit LP-favor guarantees;
-sections \ref{sec:kernel}--\S\ref{sec:fees} reference them at each
-construction step. Takers and integrators are first-class users of the
-protocol surface but inherit the LP-favor invariants from the LP side; they
-should design assuming that any sub-ulp ambiguity in the rounding chain
-will resolve in the LP's favor and against their own position.
+emergency response --- is biased in favor of the LP. Takers and integrators
+are first-class users of the protocol surface but inherit the LP-favor
+invariants from the LP side; they should design assuming that any
+sub-ulp ambiguity in the rounding chain will resolve in the LP's favor
+and against their own position.
 
 \paragraph{Reading guide.}
-\S\ref{sec:lp-protections} catalogues LP protection mechanisms.
 \S\ref{sec:kernel}--\S\ref{sec:liquidity} specify the pricing kernel and
-liquidity operations as implemented. \S\ref{sec:fees}--\S\ref{sec:funding}
-describe fees, flash loans, and the four funding modes. \S\ref{sec:arch}
-covers the deployed contract surface, \S\ref{sec:admin} the admin powers and
-parameter fixity, and \S\ref{sec:deploy} the operator's deployment-time
-calibration choices. \S\ref{sec:security} documents the security review
-process that gates production launch. \S\ref{sec:risk} states the residual
-risk surface and operational mitigations, including the framing of
-slot drainage as expected and industry-normal LP behaviour.
-
-\section{LP Protection Mechanisms}
-\label{sec:lp-protections}
-
-This section consolidates the LP-favor guarantees that the rest of the
-document references. Each mechanism is enforced in source; this is an
-index, not a statement of intent.
-
-\subsection{Kernel-Level LP Safety}
-
-\paragraph{Midpoint-$b$ never overshoots LS-LMSR.}
-The production swap kernel
-(\texttt{LMSRStabilized.swapAmountsForExactInput}) is a two-pass midpoint
-approximation of the path-exact LS-LMSR mapping (\S\ref{sec:lp-safety}).
-The output it pays the swapper is bounded above by the output the
-path-exact LS-LMSR mapping would pay under the same inputs --- the swapper
-\emph{never} receives more than the path-exact reference, and the LP
-\emph{never} loses more than the path-exact reference. The bound is
-empirically verified on a 26-point grid covering $N \in \{2,5,10,50\}$,
-$\kappa \in \{0.005, \dots, 2.0\}$, $a/q \in \{10^{-4}, \dots, 10^{-1}\}$, plus
-a 3-point asymmetric grid, to $10^{-10}$ absolute tolerance.
-
-\paragraph{Capacity caps.}
-Output is hard-capped at available inventory $y \le q_j$ in the kernel
-(\S\ref{sec:midpoint}). The cap-and-invert branch derives the input that
-the LP actually absorbs, so the pool is never required to over-pay relative
-to its inventory.
-
-\paragraph{Single-asset chain LP-favor rounding.}
-The \texttt{swapMint} and \texttt{burnSwap} chains
-(\S\ref{sec:swapmint}--\S\ref{sec:burnswap}) carry a per-primitive rounding
-discipline. Where ABDK's default \texttt{mul}/\texttt{div}/\texttt{exp}/\texttt{ln}
-floor would shave a sub-ulp gift to the swapper, the kernel substitutes a
-ceiling helper (\texttt{\_ceilMul}, \texttt{\_ceilDiv}, \texttt{\_ceilExp},
-\texttt{\_ceilLn}); where the floor direction already serves LP-favor, the
-default is kept. Every individual decision is documented in-source by signed
-partial derivative against the LP-favoring direction. The
-\texttt{EXP\_LIMIT} branch in \texttt{swapMint} carries a 1-ulp cushion on
-top of the ceiling chain so that future ABDK-level rounding changes cannot
-re-open a leak.
-
-\subsection{Fee and Protocol-Share Rounding}
-
-\begin{itemize}
-  \item \textbf{Total fees round up} for the pool and against the taker.
-  \item \textbf{Protocol share rounds down} for the LP and against the
-        protocol developers.
-  \item \textbf{Outputs to users floor}; \textbf{inputs from users ceil}.
-  \item \textbf{Pre-funded dust} is credited to LP reserves rather than
-        refunded to the caller.
-\end{itemize}
-
-The protocol developers absorb the rounding loss on the protocol-share
-split; the LP keeps the residual. This is deliberate.
-
-\subsection{Admin-Side LP Protection}
-\label{sec:admin-risk}
-
-The admin (planner owner / pool owner) cannot reach LP reserves. The
-exhaustive CAN/CANNOT inventory is in \texttt{doc/security/admin-powers.md};
-the LP-relevant summary is:
-
-\begin{itemize}
-  \item Admin \textbf{cannot} mint LP out of band, burn user LP, change
-        $\kappa$, change fees on a live pool, pause user-side
-        \texttt{burn}, blacklist or freeze user balances, upgrade the pool
-        implementation, renounce ownership, or move funds out of the pool.
-  \item Admin \textbf{can} deploy new pools, set the protocol-fee recipient
-        on a live pool, and invoke the irreversible \texttt{kill()} switch
-        on a pool they own.
-\end{itemize}
-
-\paragraph{Compromised-key worst case.}
-A leaked admin key cannot reach LP reserves. Worst case: the attacker
-calls \texttt{kill()} (disabling new deposits, swaps, flash loans, single-
-asset withdrawals, and protocol-fee collection) and rotates
-\texttt{protocolFeeAddress} so any not-yet-collected protocol fees route to
-the attacker. \texttt{burn} remains operational on a killed pool, so LPs
-can always withdraw their pro-rata share of pool reserves. The core team
-retains the ability to \texttt{kill()} the system as a final defensive
-measure --- even if the admin key is compromised, the system can be put
-into the LP-can-only-exit state. \textbf{A leaked admin key presents
-little to no danger to LP reserves}; it is a denial-of-service surface and
-a partial protocol-fee redirect surface, not a fund-loss surface.
-
-The admin key is held on a hardware wallet (see
-\S\ref{sec:deployments}).
-
-\subsection{Burn Is Always Live}
-
-\texttt{burn} (the proportional-redemption path) is the only state-mutating
-entry point that \texttt{kill()} does \emph{not} disable. The
-proportional-redemption guarantee is preserved across every kill scenario,
-every admin-key scenario, and every operator-misconfiguration scenario by
-construction: there is no code path in the protocol that can disable
-\texttt{burn} for an LP holding the LP token.
+liquidity operations as implemented. \S\ref{sec:lp-protections}
+consolidates the LP-favor guarantees these constructions establish.
+\S\ref{sec:fees}--\S\ref{sec:funding} describe fees, flash loans, and the
+four funding modes. \S\ref{sec:arch} covers the deployed contract surface,
+\S\ref{sec:admin} the admin powers and parameter fixity, and
+\S\ref{sec:deploy} the operator's deployment-time calibration choices.
+\S\ref{sec:security} documents the security review process that gates
+production launch. \S\ref{sec:risk} states the residual risk surface and
+operational mitigations, including the framing of slot drainage as
+expected and industry-normal LP behavior.
 
 \section{Pricing Kernel}
 \label{sec:kernel}
@@ -381,7 +280,7 @@ $b_{\mathrm{mid}}$ is strictly below the size metric at the midpoint of the
 $b$ on the relevant regime, so the recomputed $y_{\mathrm{mid}}$ is less
 than the path-exact midpoint-rule output, which itself is bounded above by
 $y^*$ (the true cost-preserving fill). Both bounds operate in the
-LP-favouring direction.
+LP-favoring direction.
 
 \paragraph{Empirical verification.}
 The property is verified by exhaustive grid testing in
@@ -549,6 +448,107 @@ failure.
 \texttt{burnSwap} is disabled by \texttt{kill()}; \texttt{burn} is not. A
 killed pool therefore permits proportional redemption but not single-asset
 redemption.
+
+\section{LP Protection Mechanisms}
+\label{sec:lp-protections}
+
+The pricing kernel (\S\ref{sec:kernel}) and liquidity operations
+(\S\ref{sec:liquidity}) carry per-primitive rounding and approximation
+choices that resolve every sub-ulp ambiguity in the LP's favor. This
+section consolidates those guarantees and adds the admin-side LP
+protections that constrain the operator surface. Each mechanism is
+enforced in source; this is an index, not a statement of intent.
+
+\subsection{Kernel-Level LP Safety}
+
+\paragraph{Midpoint-$b$ never overshoots LS-LMSR.}
+The production swap kernel
+(\texttt{LMSRStabilized.swapAmountsForExactInput}) is a two-pass midpoint
+approximation of the path-exact LS-LMSR mapping (\S\ref{sec:lp-safety}).
+The output it pays the swapper is bounded above by the output the
+path-exact LS-LMSR mapping would pay under the same inputs --- the swapper
+\emph{never} receives more than the path-exact reference, and the LP
+\emph{never} loses more than the path-exact reference. The bound is
+empirically verified on a 26-point grid covering $N \in \{2,5,10,50\}$,
+$\kappa \in \{0.005, \dots, 2.0\}$, $a/q \in \{10^{-4}, \dots, 10^{-1}\}$, plus
+a 3-point asymmetric grid, to $10^{-10}$ absolute tolerance.
+
+\paragraph{Capacity caps.}
+Output is hard-capped at available inventory $y \le q_j$ in the kernel
+(\S\ref{sec:midpoint}). The cap-and-invert branch derives the input that
+the LP actually absorbs, so the pool is never required to over-pay relative
+to its inventory.
+
+\paragraph{Single-asset chain LP-favor rounding.}
+The \texttt{swapMint} and \texttt{burnSwap} chains
+(\S\ref{sec:swapmint}--\S\ref{sec:burnswap}) carry a per-primitive rounding
+discipline. Where ABDK's default \texttt{mul}/\texttt{div}/\texttt{exp}/\texttt{ln}
+floor would shave a sub-ulp gift to the swapper, the kernel substitutes a
+ceiling helper (\texttt{\_ceilMul}, \texttt{\_ceilDiv}, \texttt{\_ceilExp},
+\texttt{\_ceilLn}); where the floor direction already serves LP-favor, the
+default is kept. Every individual decision is documented in-source by signed
+partial derivative against the LP-favoring direction. The
+\texttt{EXP\_LIMIT} branch in \texttt{swapMint} carries a 1-ulp cushion on
+top of the ceiling chain so that future ABDK-level rounding changes cannot
+re-open a leak.
+
+\subsection{Fee and Protocol-Share Rounding}
+
+\begin{itemize}
+  \item \textbf{Total fees round up} for the pool and against the taker.
+  \item \textbf{Protocol share rounds down} for the LP and against the
+        protocol developers.
+  \item \textbf{Outputs to users floor}; \textbf{inputs from users ceil}.
+  \item \textbf{Pre-funded dust} is credited to LP reserves rather than
+        refunded to the caller.
+\end{itemize}
+
+The protocol developers absorb the rounding loss on the protocol-share
+split; the LP keeps the residual. This is deliberate. Section
+\ref{sec:fees} specifies the fee mathematics this rounding policy applies
+to.
+
+\subsection{Admin-Side LP Protection}
+\label{sec:admin-risk}
+
+The admin (planner owner / pool owner) cannot reach LP reserves. The
+exhaustive CAN/CANNOT inventory is in \texttt{doc/security/admin-powers.md};
+the LP-relevant summary is:
+
+\begin{itemize}
+  \item Admin \textbf{cannot} mint LP out of band, burn user LP, change
+        $\kappa$, change fees on a live pool, pause user-side
+        \texttt{burn}, blacklist or freeze user balances, upgrade the pool
+        implementation, renounce ownership, or move funds out of the pool.
+  \item Admin \textbf{can} deploy new pools, set the protocol-fee recipient
+        on a live pool, and invoke the irreversible \texttt{kill()} switch
+        on a pool they own.
+\end{itemize}
+
+\paragraph{Compromised-key worst case.}
+A leaked admin key cannot reach LP reserves. Worst case: the attacker
+calls \texttt{kill()} (disabling new deposits, swaps, flash loans, single-
+asset withdrawals, and protocol-fee collection) and rotates
+\texttt{protocolFeeAddress} so any not-yet-collected protocol fees route to
+the attacker. \texttt{burn} remains operational on a killed pool, so LPs
+can always withdraw their pro-rata share of pool reserves. The core team
+retains the ability to \texttt{kill()} the system as a final defensive
+measure --- even if the admin key is compromised, the system can be put
+into the LP-can-only-exit state. \textbf{A leaked admin key presents
+little to no danger to LP reserves}; it is a denial-of-service surface and
+a partial protocol-fee redirect surface, not a fund-loss surface.
+
+The admin key is held on a hardware wallet (see
+\S\ref{sec:deployments}).
+
+\subsection{Burn Is Always Live}
+
+\texttt{burn} (the proportional-redemption path) is the only state-mutating
+entry point that \texttt{kill()} does \emph{not} disable. The
+proportional-redemption guarantee is preserved across every kill scenario,
+every admin-key scenario, and every operator-misconfiguration scenario by
+construction: there is no code path in the protocol that can disable
+\texttt{burn} for an LP holding the LP token.
 
 \section{Fee Structure}
 \label{sec:fees}
@@ -959,12 +959,12 @@ through \texttt{receive()}.
 \section{Security Review Process}
 \label{sec:security}
 
-\subsection{Layered Defence}
+\subsection{Layered Defense}
 
-The protocol applies a defence-in-depth posture (\texttt{doc/security/threat-model.md} \S1):
+The protocol applies a defense-in-depth posture (\texttt{doc/security/threat-model.md} \S1):
 
 \begin{itemize}
-  \item \textbf{Permissioned deploy} as the primary defence against malicious
+  \item \textbf{Permissioned deploy} as the primary defense against malicious
         tokens. \texttt{PartyPlanner.newPool} is \texttt{onlyOwner},
         indefinitely. The operator is the trust anchor for token vetting.
   \item \textbf{Runtime guards.} \texttt{nonReentrant} on every state-mutating
@@ -986,9 +986,9 @@ The protocol applies a defence-in-depth posture (\texttt{doc/security/threat-mod
 There is no on-chain price oracle dependency; pricing is intrinsic to the
 LMSR kernel.
 
-\subsection{Internal Review Artefacts}
+\subsection{Internal Review Artifacts}
 
-The repository carries the following internal review artefacts that gate
+The repository carries the following internal review artifacts that gate
 launch (see \texttt{doc/security/}):
 
 \begin{itemize}
@@ -1082,7 +1082,7 @@ Per \texttt{SECURITY.md}, the following are out of scope:
 \section{Risk Management}
 \label{sec:risk}
 
-\subsection{Slot Drainage Is Expected LP Behaviour}
+\subsection{Slot Drainage Is Expected LP Behavior}
 \label{sec:drainage}
 
 \textbf{Slots in a Liquidity Party pool will drain. This is normal,
@@ -1245,7 +1245,7 @@ pools as a final defensive measure if the admin key is compromised.
 \paragraph{Indexer.}
 Liquidity Party does not host a public subgraph at this time. A
 canonical metadata index will be published as a static \texttt{metadata.json}
-artefact; the exact distribution channel is to be confirmed at launch.
+artifact; the exact distribution channel is to be confirmed at launch.
 \stub{Metadata index publication URL.}
 
 Integrators that need event-level data should consume the canonical event
@@ -1289,7 +1289,7 @@ responsible for their own tax compliance.
 \paragraph{Forward-looking statements.}
 Statements in this whitepaper regarding future deployments (Base
 expansion, formal bug bounty, metadata index), future audit report
-publication, and future protocol behaviour are forward-looking. They
+publication, and future protocol behavior are forward-looking. They
 reflect current intent and are not commitments.
 
 \paragraph{Risk acknowledgement.}
