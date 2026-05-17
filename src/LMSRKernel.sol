@@ -719,27 +719,174 @@ library LMSRKernel {
                     int128 qDiffOverB = qDiffIJ.mul(invB);
 
                     if (qDiffOverB > EXP_LIMIT) {
-                        // q_i ≫ q_j: r0_j = exp(qDiff/b) is unrepresentable. The exact
-                        // y → ∞ (Hanson exact-in saturates), so the only meaningful cap
-                        // is the pool's available qLocal[i]. We pay capAmount to the
-                        // burner; the simulated amountInUsed → 0 as r0_j → ∞, so we do
-                        // NOT update qLocal[j] (consistent with the asymptotic limit and
-                        // with the fact that the actual burnSwap impl never deposits
-                        // asset j into the pool either — see PartyPoolMintImpl.burnSwap).
+                        // ============================================================
+                        // EXP_LIMIT regime (qDiff/b > 32): r0_j = exp(qDiff/b) is not
+                        // representable in Q64.64. The natural formula
+                        //     y = b · ln(1 + r0_j · (1 − exp(−aj/b)))
+                        // does NOT saturate to qLocal[i] (the prior implementation's
+                        // "y → ∞" comment was incorrect). y is finite. Factor r0_j out
+                        // of the log:
+                        //     1 + r0_j · (1 − exp(−aj/b))
+                        //         = r0_j · (1/r0_j + 1 − exp(−aj/b))
+                        //         = exp(qDiff/b) · (exp(−qDiff/b) + 1 − exp(−aj/b))
+                        // Hence:
+                        //     y = qDiff + b · ln( 1 − exp(−aj/b) + exp(−qDiff/b) )
+                        // This is the exact Hanson exact-in payout rewritten in a form
+                        // that uses only NEGATIVE-argument exponentials, both of which
+                        // are representable in Q64.64 (decay toward 0, not toward ∞).
                         //
-                        // LP-favor cushion: shave 1 ulp off the cap so the burner gets
-                        // strictly less than the full simulation result. This is sub-2^{-64}
-                        // of qLocal[i] but closes the explicit-rounding invariant for
-                        // this branch and prevents flash-loan-amplified leakage of the
-                        // exact representation.
-                        int128 capAmount = qLocal[i] > int128(0)
-                            ? qLocal[i].sub(int128(1))
-                            : int128(0);
-                        qLocal[i] = int128(0);
-                        if (capAmount > int128(0)) {
-                            amountOut = amountOut.add(capAmount);
-                            anyNonZero = true;
+                        // Sign / range analysis of `inner = 1 − exp(−aj/b) + exp(−qDiff/b)`:
+                        //   • 1 − exp(−aj/b) ∈ (0, 1) for aj > 0.
+                        //   • exp(−qDiff/b) ∈ (0, exp(−32)] ≈ (0, 1.27e−14].
+                        //   • Sum ∈ (0, 1) strictly: exp(−qDiff/b) ≤ exp(−aj/b) requires
+                        //     qDiff ≥ aj, which holds because qDiff/b > 32 while aj/b is
+                        //     bounded by α·max(q)/b (typically ≪ 32).
+                        // Therefore ln(inner) < 0 and b·ln(inner) < 0, giving y < qDiff
+                        // and (since qDiff ≤ qLocal[i]) y < qLocal[i]. The cap-hit
+                        // path is structurally unreachable in this branch.
+                        //
+                        // This is the FLOOR-polarity dual of the mint EXP_LIMIT branch
+                        // (L438–496), which uses the analogous factorization but with
+                        // _ceil* helpers to upper-bound xj (mint is "user pays in", so
+                        // LP-favor means xj larger). Here burn is "user gets out", so
+                        // LP-favor means y smaller, and we want natural ABDK floors on
+                        // every primitive *except* expNegA (where the floor's polarity
+                        // is reversed by the sign of ln(inner)).
+                        //
+                        // Partial-derivative rounding analysis (for smaller y, LP-favor):
+                        //   ∂y/∂(expNegA)    > 0  (larger expNegA ⇒ smaller inner)
+                        //                          but ln(inner)<0, so smaller inner ⇒
+                        //                          more-negative ln ⇒ SMALLER y.
+                        //                          ∴ want LARGER expNegA ⇒ CEIL.
+                        //   ∂y/∂(expNegQDiff)> 0  larger expNegQDiff ⇒ larger inner ⇒
+                        //                          less-negative ln ⇒ LARGER y.
+                        //                          ∴ want SMALLER expNegQDiff ⇒ FLOOR.
+                        //   ∂y/∂(ln value)   > 0  larger ln ⇒ larger b·ln (less neg)
+                        //                          ⇒ larger y. ∴ want SMALLER ln ⇒ FLOOR.
+                        //   ∂y/∂(b·ln value) > 0  same: want SMALLER (more negative)
+                        //                          ⇒ FLOOR (toward −∞).
+                        //   ∂y/∂(qDiff)      > 0  smaller qDiff ⇒ smaller y. qDiff is
+                        //                          exact subtraction (L716), not rounded.
+                        // ============================================================
+
+                        // expNegA = exp(−aj/b). expArg from L709 is aj·invB, already
+                        // floored (smaller expArg ⇒ less-negative .neg() ⇒ larger result
+                        // pre-bump, which is LP-favor). ABDK exp itself floors → smaller
+                        // expNegA than the true value, which is SWAPPER-favor here, so
+                        // we bump +1 ulp to ceil. Identical to the normal-path treatment
+                        // at L910–911. The saturation guard `expNegA < int128.max` is
+                        // defensive: the natural exp of a non-positive argument is in
+                        // (0, ONE], never near int128.max, but the check costs nothing.
+                        int128 expNegA = _exp(expArg.neg());
+                        // Safe to unchecked: the guard ensures expNegA + 1 cannot
+                        // overflow the int128 range (we only bump when strictly below
+                        // int128.max).
+                        if (expNegA < int128(type(int128).max)) {
+                            unchecked { expNegA = expNegA + 1; }
                         }
+
+                        // ONE.sub(expNegA): exact int128 subtraction. Inherits the +1
+                        // ulp ceil bump on expNegA, so (1−expNegA) is at most the true
+                        // value minus 1 ulp — i.e. floored, which makes `inner` smaller,
+                        // which makes ln(inner) more negative, which makes y smaller.
+                        // LP-favor. We guard against the underflow expNegA ≥ ONE (which
+                        // can happen only if aj·invB rounded to zero, i.e. aj is sub-ulp
+                        // relative to b): in that degenerate case the leg contributes
+                        // ~0 to amountOut and we skip it rather than emit a negative
+                        // inner. This matches the existing pattern at L914–921.
+                        int128 oneMinusExpNegA = ONE.sub(expNegA);
+                        if (oneMinusExpNegA <= int128(0)) {
+                            unchecked { j++; }
+                            continue;
+                        }
+
+                        // expNegQDiff = exp(−qDiff/b). qDiffOverB > EXP_LIMIT, so the
+                        // .neg() argument is ≤ −32, and ABDK exp on a negative argument
+                        // returns a strictly-positive value bounded above by exp(−32)
+                        // ≈ 1.27e−14. ABDK exp floors → SMALLER expNegQDiff than the
+                        // true value. Smaller expNegQDiff ⇒ smaller `inner` ⇒ more
+                        // negative ln ⇒ smaller y. LP-favor NATURALLY (no ceil bump).
+                        //
+                        // We are DELIBERATELY relying on ABDK's floor here, not just
+                        // tolerating it. If a future ABDK upgrade switched exp() to
+                        // round-to-nearest, this branch's LP-favor invariant would have
+                        // to be re-derived (we'd need an explicit _floorExp helper). The
+                        // dependence is called out so a reviewer notices.
+                        int128 expNegQDiff = _exp(qDiffOverB.neg());
+
+                        // inner = (1 − exp(−aj/b)) + exp(−qDiff/b). Both addends are
+                        // ≥ 0 and bounded by ONE; their sum cannot overflow int128.
+                        // Exact addition. Range: oneMinusExpNegA ∈ (0, ONE) above and
+                        // expNegQDiff ∈ (0, exp(−32)·ONE], so inner ∈ (0, ONE + ε).
+                        // The `inner >= ONE` guard rejects the degenerate case where
+                        // ABDK rounding produced inner = ONE exactly (would give
+                        // ln(inner) = 0 and y = qDiff, but qDiff could still be ≤
+                        // qLocal[i]; the safe choice under uncertainty is to skip the
+                        // leg, again matching the L914–921 zero-contribution pattern).
+                        int128 innerSat = oneMinusExpNegA.add(expNegQDiff);
+                        if (innerSat <= int128(0) || innerSat >= ONE) {
+                            unchecked { j++; }
+                            continue;
+                        }
+
+                        // ln(innerSat) with innerSat ∈ (0, 1). ABDK ln on (0, 1) returns
+                        // a negative int128. ABDK rounds toward −∞ for negative outputs
+                        // (consistent with its "floor" semantics) → result MORE NEGATIVE
+                        // than the true ln(innerSat). More negative ⇒ smaller y →
+                        // LP-favor. ABDK ln requires its argument > 0 (the > 0 check
+                        // above covers this; we don't re-require here for gas).
+                        int128 lnInner = ABDKMath64x64.ln(innerSat);
+
+                        // b · ln(inner). b > 0 (state-dep κ·sizeMetric, guarded at
+                        // L698); lnInner < 0; product < 0. ABDK mul uses an arithmetic
+                        // right-shift of the int256 intermediate, which floors toward
+                        // −∞ regardless of operand signs. For a NEGATIVE product, floor
+                        // toward −∞ means MORE NEGATIVE than the true product → smaller
+                        // y → LP-favor. The polarity of ABDK mul reverses across signs,
+                        // so this comment is essential: a reader who memorized "ABDK mul
+                        // floors = LP-favor for positive products" must be reminded that
+                        // we're consuming the OPPOSITE direction here, and it still
+                        // works in our favor BECAUSE of the sign flip.
+                        int128 bLn = b.mul(lnInner);
+
+                        // ySat = qDiff + b·ln(innerSat). qDiff = qDiffIJ from L716 is
+                        // exact int128 subtraction (not rounded). bLn floored LP-favor
+                        // above. Exact addition → ySat is a lower bound on the true
+                        // payout.
+                        int128 ySat = qDiffIJ.add(bLn);
+
+                        // Defensive: by the range analysis ySat > 0 (qDiff > 32·b and
+                        // |bLn| < b·|ln(1−exp(−aj/b))| which is bounded by the leg's
+                        // natural payout). If rounding ever pushed ySat to ≤ 0 we'd
+                        // skip the leg rather than emit a negative contribution. Same
+                        // defensive style as L914–921, L982.
+                        if (ySat <= int128(0)) {
+                            unchecked { j++; }
+                            continue;
+                        }
+
+                        // Invariant guard: by the math ySat < qDiff ≤ qLocal[i]
+                        // strictly, so the cap-hit branch is unreachable. Require it
+                        // explicitly to surface any future ABDK-rounding regression
+                        // rather than silently overpay. If this ever fires it's a bug,
+                        // not a legitimate cap-hit (cap-hit is handled in the non-
+                        // EXP_LIMIT path at L925–968 where the exact-arithmetic y can
+                        // exceed qLocal[i] for borderline trades).
+                        require(ySat <= qLocal[i], "EXP_LIMIT inv");
+
+                        // State update mirroring the non-saturation normal-path at
+                        // L973–975: the pool absorbed aj of asset j and paid out ySat
+                        // of asset i. Both updates are exact int128 add/sub. The OLD
+                        // implementation skipped the qLocal[j] update on the (incorrect)
+                        // grounds that amountInUsed → 0 as r0_j → ∞; with the corrected
+                        // finite-y formula the simulation correctly reflects reality:
+                        // the actual burnSwap chain does deposit aj of j into the pool
+                        // for each leg, so qLocal[j] += aj is consistent with the
+                        // post-chain on-chain state q[j] = (1−α)·q[j] + α·q[j] = q[j].
+                        qLocal[j] = qLocal[j].add(aj);
+                        qLocal[i] = qLocal[i].sub(ySat);
+                        amountOut = amountOut.add(ySat);
+                        anyNonZero = true;
                         unchecked { j++; }
                         continue;
                     }

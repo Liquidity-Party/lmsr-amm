@@ -17,7 +17,7 @@ from incumbent LPs.
 
 **Argument.** Mint, burn, and swap all price through the *same* convex LMSR
 potential `C(q) = b(q) · log Σ exp(q_i / b(q))` with `b(q) = κ · S(q)`
-(`LMSRKernel.sol:565` `updateForProportionalChange` for liquidity steps;
+(`LMSRKernel.sol:1021` `updateForProportionalChange` for liquidity steps;
 `applySwap` for trades). Because `C` is convex, any closed cycle of kernel-
 priced steps satisfies `Σ ΔC = 0` in the fee-free idealization (whitepaper
 §Liquidity Manipulation, eq. cycle-zero). Mint and burn are exact inverses on
@@ -51,7 +51,7 @@ arguments) that any state change moving `S` is itself kernel-priced, so there
 is no off-market lever to alter `b`. Specifically:
 
 1. **Proportional liquidity** (`PartyPoolMintImpl.mint` / `burn` →
-   `LMSRKernel.updateForProportionalChange`, `LMSRKernel.sol:565`)
+   `LMSRKernel.updateForProportionalChange`, `LMSRKernel.sol:1021`)
    maps `q ↦ (1+α)q` and `b ↦ (1+α)b` — pairwise marginal ratios are
    homothety-invariant. A proportional mint plus its exact inverse returns the
    pool to the same state with no net transfer.
@@ -62,7 +62,7 @@ is no off-market lever to alter `b`. Specifically:
    per-token fee schedule (`f_i < 10,000 ppm`, `φ < 400,000 ppm`) makes any
    real cycle strictly loss-making.
 
-Code paths verified: `updateForProportionalChange` (`LMSRKernel.sol:565`)
+Code paths verified: `updateForProportionalChange` (`LMSRKernel.sol:1021`)
 asserts `newQInternal[i] > 0` and updates the cached `qInternal` slot-by-slot;
 the size metric `S` is recomputed from `qInternal` on every kernel call
 (no stale cache). Slot-level integrity is fuzzed by
