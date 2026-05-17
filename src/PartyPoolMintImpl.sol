@@ -329,12 +329,15 @@ library PartyPoolMintImpl {
 
         withdrawAmounts = burnAmounts(lpAmount, s._totalSupply, s._cachedUintBalances);
 
+        // CEI: commit all pool-state writes (cached balances, qInternal, LP burn) BEFORE
+        // any external token send. Otherwise, the first send's receive() callback can
+        // observe a partially-updated state where some balances are already reduced but
+        // totalSupply is not (or vice versa), poisoning external per-LP price reads.
         bool allZero = true;
         int128[] memory newQInternal = new int128[](n);
         for (uint i = 0; i < n; ) {
             uint256 amount = withdrawAmounts[i];
             if (amount > 0) {
-                _sendTokenTo(s._tokens[i], receiver, amount, unwrap, wrapper);
                 uint256 newBal = s._cachedUintBalances[i] - amount;
                 s._cachedUintBalances[i] = newBal;
                 newQInternal[i] = ABDKMath64x64.divu(newBal, bases[i]);
@@ -357,6 +360,15 @@ library PartyPoolMintImpl {
             }
         }
         _erc20Burn(s, payer, lpAmount);
+
+        // External interactions LAST.
+        for (uint i = 0; i < n; ) {
+            uint256 amount = withdrawAmounts[i];
+            if (amount > 0) {
+                _sendTokenTo(s._tokens[i], receiver, amount, unwrap, wrapper);
+            }
+            unchecked { i++; }
+        }
 
         emit IPartyPool.Burn(payer, receiver, withdrawAmounts, lpAmount);
     }
@@ -654,8 +666,11 @@ library PartyPoolMintImpl {
         // guard at divu below.
         require(amountOut + protoShare <= s._cachedUintBalances[outputTokenIndex],
                 "burnSwap: out > balance");
-        _sendTokenTo(outputToken, receiver, amountOut, unwrap, wrapper);
 
+        // CEI: commit all pool-state writes (cached balances + qInternal) BEFORE the
+        // external token send. Without this ordering, a WETH-unwrap receive() callback
+        // can observe a reduced totalSupply over un-reduced balances/LMSR, producing an
+        // inflated per-LP read for any external pricing consumer.
         int128[] memory newQInternal = new int128[](n);
         for (uint256 idx = 0; idx < n; idx++) {
             uint256 newBal = s._cachedUintBalances[idx];
@@ -676,6 +691,8 @@ library PartyPoolMintImpl {
         } else {
             s._lmsr.updateForProportionalChange(newQInternal);
         }
+
+        _sendTokenTo(outputToken, receiver, amountOut, unwrap, wrapper);
 
         // protoShare <= outFee always (protocolFeePpm < 1_000_000)
         uint256 lpFeeShare;
