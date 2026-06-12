@@ -1,0 +1,55 @@
+#!/bin/bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+forge build
+
+echo
+echo "=== openchain.xyz ==="
+forge selectors upload --all
+
+echo
+echo "=== 4byte.directory ==="
+
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+
+ok=0
+fail=0
+
+for abi_file in out/*/*.json; do
+  [[ "$abi_file" == out/build-info/* ]] && continue
+
+  abi=$(jq -c '.abi // empty' "$abi_file" 2>/dev/null)
+  if [ -z "$abi" ] || [ "$abi" = "[]" ]; then
+    continue
+  fi
+
+  name=$(basename "$abi_file" .json)
+  printf "  %-45s" "$name"
+
+  payload=$(jq -n --argjson a "$abi" '{"contract_abi": ($a | tostring)}')
+  code=$(curl -s -o "$tmp" -w '%{http_code}' -X POST \
+    -H 'Content-Type: application/json' \
+    -d "$payload" \
+    'https://www.4byte.directory/api/v1/import-abi/')
+
+  if [ "$code" = "200" ] || [ "$code" = "201" ]; then
+    n=$(jq -r '.num_processed // "?"' "$tmp" 2>/dev/null || echo "?")
+    echo "OK ($n new)"
+    ok=$((ok+1))
+  else
+    body=$(cat "$tmp")
+    echo "HTTP $code: $body"
+    fail=$((fail+1))
+  fi
+done
+
+echo
+if [ $fail -eq 0 ]; then
+  echo "4byte.directory: $ok contracts uploaded."
+else
+  echo "4byte.directory: $ok ok, $fail failed."
+  exit 1
+fi

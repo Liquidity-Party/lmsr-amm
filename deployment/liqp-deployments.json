@@ -1,0 +1,19 @@
+{
+  "1": {
+    "v1": {
+      "PartyPlanner": "0x5E9DB9fa66aeA7f254d4A6783b1a6180C4B8AAe3",
+      "PartyInfo": "0xefF3Ed388D3887e7C9F375B7f1ad8A0B77C05643",
+      "PartyPoolExtraImpl1": "0xAcb7089D62b67545299842bc7133582f8bE9eB86",
+      "PartyPoolExtraImpl2": "0x669a9B0cBdEFb31380b912C1dF3b77fA7C18D821",
+      "PartyConciergeExtraImpl": "0xF827E63d77f887F7d04063F46bD7b8b57d1C40ED",
+      "PartyPoolInitCode": "0x6C3f9BAE69AA253E7f3655D9188315522967dD2d",
+      "PartyConcierge": "0x734005e7b2E833f71D45886752491442C00c2682",
+      "Permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+      "WrapperToken": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "pools": [
+      ]
+    },
+    "tokens": [
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+/cache/
+/out/
+/internal
+/log/
+/.env
+/.env-*
+/.idea/
+package-lock.json
+/broadcast
+.validate-cache
+
+*secret*
+
+# Mockchain files
+/liqp-deployments.json
+/metadata.json
+/state
+
+# Temporary security reference catalogs (shallow clones, regenerated per review cycle)
+/security/references/
+.claude
+.gas-snapshot

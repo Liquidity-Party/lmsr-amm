@@ -1,0 +1,25 @@
+#!/bin/bash
+
+if [[ -z "$1" ]]; then
+  echo "Usage: $(basename $0) <pool-address>" >&2
+  exit 1
+fi
+
+source .env
+
+echo "⚠️  WARNING: This will permanently kill the pool at $1"
+echo "This action cannot be undone."
+echo ""
+read -p "Are you sure you want to proceed? (type 'yes' to confirm): " confirmation
+
+if [[ "$confirmation" != "yes" ]]; then
+  echo "Canceled."
+  exit 0
+fi
+
+echo ""
+echo "🚀 Sending kill() transaction..."
+tx_id=$(cast send --rpc-url $ETHEREUM_RPC_URL --trezor "$1" 'kill()')
+echo ""
+echo "✅ Pool killed successfully!"
+echo "https://etherscan.io/tx/$tx_id"

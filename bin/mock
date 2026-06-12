@@ -1,0 +1,494 @@
+#!/bin/bash
+# Local-anvil mock environment.
+#
+# Without arguments, behaves like a plain forge-script deployer: starts anvil with
+# default auto-mine, runs DeployMock, and hands the floor to the user.
+#
+# With `--block-time SECONDS` (or the legacy alias `slow` ≡ `--block-time 12`), the
+# script disables anvil auto-mine and instead spawns a background loop that:
+#   1. mines the previous tick's batch (sealing arb+keeper+user txs into one block),
+#   2. invokes BlockAdvancer once per pool to evolve off-chain prices and submit fresh
+#      arb-bot + keeper txs into the mempool.
+# The mempool ordering (--order fifo) keeps the BlockAdvancer txs at the top of the
+# next block; user txs accumulated during the wait window land after them. This
+# simulates a "live" environment with organic price drift and reactive bot activity.
+#
+# With `--mint-test` (requires --block-time), a third "minter" actor runs each tick
+# after the arb + keeper. It reproduces a concierge-submitted basket mint — a small
+# (sub-γ-threshold) proportional mint of every OG-pool token — and records whether it
+# would succeed or revert, classifying the revert reason ("volatile market", etc.).
+# This is a direct diagnostic for the otherwise-silent question "is the raw mint gate
+# really tripping every block?": the concierge swallows the revert by queueing, so it
+# offers no feedback channel. See the run_minter comment below for why it probes via
+# eth_call against the *pending* block rather than sending a real mint.
+
+set -euo pipefail
+
+# ── Account constants (stable across runs by design) ─────────────────────────────
+# Synthetic deployer — not any anvil dev account, so its nonce sequence is exclusive
+# to this script and every deployed address (planner, pools, tokens, ...) is identical
+# from run to run. bin/mock funds this account via anvil_setBalance below before
+# invoking forge.
+DEPLOYER_PK=0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+DEPLOYER_ADDR=$(cast wallet address --private-key "$DEPLOYER_PK")
+
+# arbBot = anvil dev #5, keeper = anvil dev #6. Pre-funded with 10000 ETH by anvil's
+# genesis allocation — no top-up needed.
+ARB_BOT_PK=0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba
+KEEPER_PK=0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e
+
+# minter = anvil dev #7. Also genesis-funded with 10000 ETH. Only used under
+# --mint-test, as a standalone basket-mint probe against the OG pool.
+MINTER_PK=0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356
+
+# Canonical Permit2 address — identical on every real chain. We plant Permit2's runtime
+# bytecode here via anvil_setCode after the deploy (see below), so swapPermit2 / mint-queue
+# traffic works against the mock node exactly as it does on a live chain. DeployMock
+# references this same address for the planner/concierge Permit2 immutables.
+PERMIT2_ADDR=0x000000000022D473030F116dDEE9F6B43aC78BA3
+
+STATE_DIR="state/block-advancer/31337"
+
+# ── Args ────────────────────────────────────────────────────────────────────────
+BLOCK_TIME=""
+MINT_TEST=0
+PASSTHRU=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --block-time)
+            BLOCK_TIME="$2"
+            shift 2
+            ;;
+        --block-time=*)
+            BLOCK_TIME="${1#--block-time=}"
+            shift
+            ;;
+        --mint-test)
+            MINT_TEST=1
+            shift
+            ;;
+        slow)
+            # Legacy alias from the pre-simulator era.
+            BLOCK_TIME=12
+            shift
+            ;;
+        *)
+            PASSTHRU+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# ── Cleanup ─────────────────────────────────────────────────────────────────────
+cleanup() {
+    if [[ -n "${TICK_PID:-}" ]] && kill -0 "$TICK_PID" 2>/dev/null; then
+        kill "$TICK_PID" 2>/dev/null || true
+    fi
+    if [[ -n "${ANVIL_PID:-}" ]] && kill -0 "$ANVIL_PID" 2>/dev/null; then
+        kill "$ANVIL_PID" 2>/dev/null || true
+        sleep 0.2
+        kill -9 "$ANVIL_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# ── Workspace ────────────────────────────────────────────────────────────────────
+mkdir -p log
+mkdir -p "$STATE_DIR"
+
+# Clear stale broadcast artifacts so Forge doesn't resume a previous run on a fresh anvil.
+rm -f broadcast/DeployMock.sol/31337/run-latest.json
+rm -f broadcast/BlockAdvancer.s.sol/31337/run-latest.json
+
+# Clear stale manifests so a failed deploy doesn't leave the previous run's addresses
+# behind for downstream tooling to silently consume.
+rm -f liqp-deployments.json metadata.json
+
+# Clear persisted off-chain price state — each fresh anvil starts at price 1.0.
+rm -f "$STATE_DIR"/*.json 2>/dev/null || true
+
+# Truncate log so the "Listening on" check below doesn't match a stale entry.
+> log/anvil.txt
+
+# ── Launch anvil ────────────────────────────────────────────────────────────────
+# --order fifo: BlockAdvancer txs (submitted at the top of each tick) must be ordered
+#               before user txs that arrive during the wait window.
+# We always start anvil in auto-mine mode — DeployMock's `forge script --slow` relies
+# on each tx confirming before the next is sent, which would deadlock against
+# --no-mining. When --block-time is set we flip auto-mine *off* after the deploy
+# completes and let the tick loop drive mining from there on out.
+ANVIL_FLAGS=(--disable-block-gas-limit --order fifo)
+
+# shellcheck disable=SC2068
+anvil ${ANVIL_FLAGS[@]} > >(tee log/anvil.txt) &
+ANVIL_PID=$!
+
+echo "Waiting for anvil to start..."
+counter=0
+until grep -q "Listening on" log/anvil.txt 2>/dev/null; do
+    sleep 1
+    counter=$((counter + 1))
+    if [ $counter -ge 10 ]; then
+        echo "Timeout waiting for anvil to start"
+        exit 1
+    fi
+done
+
+# ── Fund deployer ────────────────────────────────────────────────────────────────
+echo "Funding synthetic deployer $DEPLOYER_ADDR"
+cast rpc anvil_setBalance "$DEPLOYER_ADDR" 0x21e19e0c9bab2400000 >/dev/null  # 10000 ETH
+
+# ── Deploy ──────────────────────────────────────────────────────────────────────
+forge script -vvv --private-key "$DEPLOYER_PK" DeployMock \
+    --fork-url http://localhost:8545 --broadcast --slow "${PASSTHRU[@]}" || exit 1
+
+# ── Plant canonical Permit2 ───────────────────────────────────────────────────
+# Permit2 lives at a fixed canonical address on every real chain; the mock node can't
+# reach that deployment, so plant its runtime bytecode directly at the canonical address
+# (mirrors the vm.etch the Permit2 tests use). The forge run above built the project, so
+# the Permit2 artifact is present. Permit2 recomputes its EIP-712 domain separator when
+# the cached chainid (zeroed in the planted bytecode) differs from block.chainid, so the
+# planted code validates signatures correctly on 31337.
+PERMIT2_CODE=$(jq -r '.deployedBytecode.object' out/Permit2.sol/Permit2.json)
+if [[ -z "$PERMIT2_CODE" || "$PERMIT2_CODE" == "null" ]]; then
+    echo "ERROR: Permit2 deployed bytecode not found in out/Permit2.sol/Permit2.json" >&2
+    exit 1
+fi
+echo "Planting canonical Permit2 at $PERMIT2_ADDR"
+cast rpc anvil_setCode "$PERMIT2_ADDR" "$PERMIT2_CODE" >/dev/null
+
+# ── Assemble liqp-deployments.json from broadcast ───────────────────────────────
+# Forge auto-deploys the PartyPoolExtraImpl{1,2} libraries during the script run,
+# but their addresses are only visible to Solidity after deployment finishes — the
+# broadcast file is the only authoritative record. Collect the six contracts of
+# interest (4 created directly by the script + 2 auto-deployed libraries) and emit
+# the {chainId: {version: {ContractName: address}}} format used by
+# `deployment/liqp-deployments.json`. Addresses are EIP-55-checksummed via cast.
+BROADCAST=broadcast/DeployMock.sol/31337/run-latest.json
+extract_contract() {
+    # Last writer wins on the off chance a contract name appears more than once.
+    jq -r --arg name "$1" \
+        '[.transactions[] | select(.contractName == $name) | .contractAddress] | last // empty' \
+        "$BROADCAST"
+}
+declare -A CONTRACTS
+for name in PartyPlanner PartyInfo PartyPoolInitCode PartyConcierge PartyPoolExtraImpl1 PartyPoolExtraImpl2; do
+    raw=$(extract_contract "$name")
+    if [[ -z "$raw" ]]; then
+        echo "ERROR: $name not found in $BROADCAST" >&2
+        exit 1
+    fi
+    CONTRACTS[$name]=$(cast to-check-sum-address "$raw")
+done
+
+jq -n \
+    --arg planner             "${CONTRACTS[PartyPlanner]}" \
+    --arg info                "${CONTRACTS[PartyInfo]}" \
+    --arg poolInitCode        "${CONTRACTS[PartyPoolInitCode]}" \
+    --arg concierge           "${CONTRACTS[PartyConcierge]}" \
+    --arg poolExtraImpl1      "${CONTRACTS[PartyPoolExtraImpl1]}" \
+    --arg poolExtraImpl2      "${CONTRACTS[PartyPoolExtraImpl2]}" \
+    --arg permit2             "$PERMIT2_ADDR" \
+    '{ "31337": { "v1": {
+        PartyPlanner:        $planner,
+        PartyInfo:           $info,
+        PartyPoolExtraImpl1: $poolExtraImpl1,
+        PartyPoolExtraImpl2: $poolExtraImpl2,
+        PartyPoolInitCode:   $poolInitCode,
+        PartyConcierge:      $concierge,
+        Permit2:             $permit2
+    }}}' > liqp-deployments.json
+
+# ── Mint-test minter funding (only with --mint-test, which requires --block-time) ─
+# --mint-test only means something inside the tick loop (it needs an arb tx ahead of
+# it in the block); without --block-time there is no loop, so warn and disable.
+if [[ "$MINT_TEST" == 1 && -z "$BLOCK_TIME" ]]; then
+    echo "WARNING: --mint-test has no effect without --block-time (no tick loop); ignoring."
+    MINT_TEST=0
+fi
+if [[ -n "$BLOCK_TIME" && "$MINT_TEST" == 1 ]]; then
+    MINTER_ADDR=$(cast wallet address --private-key "$MINTER_PK")
+    MT_OG_POOL=$(jq -r '.pools[0].address' metadata.json)
+    echo "Funding mint-test minter $MINTER_ADDR (basket-mint probe on OG pool $MT_OG_POOL)"
+    # Auto-mine is still ON here (the manual-mine switch is below), so these prep txs
+    # confirm synchronously. Give the minter a large balance of every OG-pool token and
+    # a max approval to the pool, so that whenever the gate lets a mint through it
+    # actually fills — the only thing that can revert the probe is the mint gate or the
+    # γ rate-limit, never insufficient funds/allowance.
+    mapfile -t MT_OG_TOKENS < <(cast call "$MT_OG_POOL" "allTokens()(address[])" --rpc-url http://localhost:8545 \
+        | grep -oE '0x[0-9a-fA-F]{40}')
+    for tok in "${MT_OG_TOKENS[@]}"; do
+        cast send "$tok" "mint(address,uint256)" "$MINTER_ADDR" \
+            1000000000000000000000000000000 \
+            --private-key "$MINTER_PK" --rpc-url http://localhost:8545 >/dev/null
+        cast send "$tok" "approve(address,uint256)" "$MT_OG_POOL" \
+            0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff \
+            --private-key "$MINTER_PK" --rpc-url http://localhost:8545 >/dev/null
+    done
+fi
+
+# ── Switch to manual mining (only when --block-time is set) ─────────────────────
+if [[ -n "$BLOCK_TIME" ]]; then
+    echo "Disabling anvil auto-mine; tick loop will drive blocks."
+    cast rpc evm_setAutomine false >/dev/null
+fi
+
+# ── Tick loop (only when --block-time is set) ───────────────────────────────────
+if [[ -n "$BLOCK_TIME" ]]; then
+    echo "Starting BlockAdvancer tick loop (every ${BLOCK_TIME}s)..."
+
+    # Core contract addresses come from the canonical {chainId}/{version} manifest;
+    # pool addresses come from metadata.json (webapp MetadataJson shape); the
+    # arb/keeper addresses are derived from the private keys hardcoded at the top
+    # of this script (they're stable across runs by construction).
+    INFO=$(jq -r '."31337".v1.PartyInfo' liqp-deployments.json)
+    CONCIERGE=$(jq -r '."31337".v1.PartyConcierge' liqp-deployments.json)
+    OG_POOL=$(jq -r '.pools[0].address' metadata.json)
+    PEG_POOL=$(jq -r '.pools[1].address' metadata.json)
+    ARB_BOT=$(cast wallet address --private-key "$ARB_BOT_PK")
+    KEEPER_ADDR=$(cast wallet address --private-key "$KEEPER_PK")
+    echo "  info      = $INFO"
+    echo "  concierge = $CONCIERGE"
+    echo "  ogPool    = $OG_POOL"
+    echo "  pegPool   = $PEG_POOL"
+    echo "  arbBot    = $ARB_BOT"
+
+    # Selector + signature constants for cast send.
+    SWAP_SIG='swap(address,bytes4,address,uint256,uint256,uint256,uint256,uint256,bool,bytes)'
+    EXEC_SIG='executeMints(address,uint256)'
+    MINT_SIG='mint(address,uint256)'
+    POOL_MINT_SIG='mint(address,bytes4,address,uint256,uint256[],uint256,bool,uint256,bytes)'
+    APPROVAL_SELECTOR='0x00000000'
+    RPC=http://localhost:8545
+
+    # Per-pool token rosters. `allTokens()` is immutable, so resolve once. Indexed by the
+    # token index `i` the BlockAdvancer emits, used to mint arbBot's input-token deficit
+    # before each arb swap (mirrors ArbHarness._executeArb). Names match `${kind^^}_TOKENS`
+    # so run_advancer can pick the right array by nameref.
+    mapfile -t OG_TOKENS < <(cast call "$OG_POOL" "allTokens()(address[])" --rpc-url "$RPC" \
+        | grep -oE '0x[0-9a-fA-F]{40}')
+    mapfile -t PEG_TOKENS < <(cast call "$PEG_POOL" "allTokens()(address[])" --rpc-url "$RPC" \
+        | grep -oE '0x[0-9a-fA-F]{40}')
+
+    # Cast send fetches the sender's nonce from anvil's "latest" tag by default. With
+    # --no-mining nothing ever moves into "latest", so multiple async-submitted txs
+    # within one tick collide on the same nonce ("replacement transaction underpriced").
+    # We keep per-actor nonce counters locally and refresh them from chain at the top of
+    # each tick (just after evm_mine), then increment as we submit.
+    NONCE_ARB=0
+    NONCE_KEEPER=0
+    NONCE_MINTER=0
+
+    refresh_nonces() {
+        NONCE_ARB=$(cast nonce "$ARB_BOT" --rpc-url "$RPC")
+        NONCE_KEEPER=$(cast nonce "$KEEPER_ADDR" --rpc-url "$RPC")
+        if [[ "$MINT_TEST" == 1 ]]; then
+            NONCE_MINTER=$(cast nonce "$MINTER_ADDR" --rpc-url "$RPC")
+        fi
+    }
+
+    # ── Mint-test minter state (only with --mint-test) ──────────────────────────
+    MINTER_PENDING_TX=""
+    MINT_OK=0; MINT_VOLATILE=0; MINT_OTHER=0
+    if [[ "$MINT_TEST" == 1 ]]; then
+        # Probe size ≈ 1 ppm of LP supply. The per-window γ cap is PPM-scale (thousands
+        # of ppm), so this stays well under it — "rate limited" never fires and the only
+        # interesting failure mode is the σ_q "volatile market" gate. gammaReq =
+        # lpAmount/totalSupply stays strictly > 0 (avoids the "too small" revert).
+        MT_TS=$(cast call "$OG_POOL" "totalSupply()(uint256)" --rpc-url "$RPC")
+        MT_TS=${MT_TS%% *}
+        MINT_LP_AMOUNT=$(echo "${MT_TS:-0} / 1000000" | bc)
+        [[ -z "$MINT_LP_AMOUNT" || "$MINT_LP_AMOUNT" == "0" ]] && MINT_LP_AMOUNT=1
+        echo "  minter    = $MINTER_ADDR  (probe lp=$MINT_LP_AMOUNT ≈ 1 ppm of supply)"
+        echo "Mint-test active: a sub-γ basket mint is submitted LAST each block (after arb+keeper)."
+        echo "  results -> log/mint-test.txt"
+        > log/mint-test.txt
+    fi
+
+    # Run one BlockAdvancer cycle for one pool: evolve prices off-chain (forge script,
+    # no --broadcast), parse the ARB marker, submit arb+keeper as async cast txs so
+    # they queue in the mempool without forge waiting for receipts (anvil is in
+    # auto-mine-off mode for the duration of the loop).
+    run_advancer() {
+        local kind="$1" pool="$2" statefile="$3" logfile="$4"
+        local out
+        out=$(POOL_ADDRESS="$pool" INFO_ADDRESS="$INFO" POOL_KIND="$kind" \
+              STATE_FILE="$statefile" \
+              forge script BlockAdvancer --rpc-url "$RPC" 2>&1) || {
+            echo "$out" >> "$logfile"
+            return 0
+        }
+        echo "$out" >> "$logfile"
+
+        # forge wraps console2.log output in `  ARB <i> <j> <amountIn>` (two spaces
+        # leading). Parse defensively.
+        local arb_line
+        arb_line=$(grep -oE 'ARB [0-9]+ [0-9]+ [0-9]+' <<<"$out" | head -1)
+        if [[ -n "$arb_line" ]]; then
+            local i j amount
+            read -r _ i j amount <<<"$arb_line"
+
+            # Mint arbBot's input-token deficit before swapping, exactly like
+            # ArbHarness._executeArb: arbBot's one-time DeployMock balance can be drained
+            # by sustained one-directional arbing, which would revert the swap. MockERC20
+            # mint is permissionless. Balances are 1e18-scale so compare/subtract via bc
+            # (bash arithmetic is 64-bit). The mint takes the lower nonce so it always
+            # executes before the swap in the same block; arbBot's max approval (set in
+            # DeployMock) lets the swap pull the freshly minted tokens.
+            local -n toks="${kind^^}_TOKENS"
+            local tok="${toks[$i]}"
+            if [[ -n "$tok" ]]; then
+                local bal deficit
+                bal=$(cast call "$tok" "balanceOf(address)(uint256)" "$ARB_BOT" --rpc-url "$RPC" 2>/dev/null)
+                bal=${bal%% *}   # strip any trailing "(decimals)" annotation cast may append
+                deficit=$(echo "x=$amount-${bal:-0}; if (x>0) x else 0" | bc 2>/dev/null)
+                if [[ -n "$deficit" && "$deficit" != "0" ]]; then
+                    cast send "$tok" "$MINT_SIG" "$ARB_BOT" "$deficit" \
+                        --private-key "$ARB_BOT_PK" --rpc-url "$RPC" --async \
+                        --nonce "$NONCE_ARB" \
+                        >> "$logfile" 2>&1
+                    NONCE_ARB=$((NONCE_ARB + 1))
+                fi
+            fi
+
+            cast send "$pool" "$SWAP_SIG" \
+                "$ARB_BOT" "$APPROVAL_SELECTOR" "$ARB_BOT" "$i" "$j" "$amount" 0 0 false 0x \
+                --private-key "$ARB_BOT_PK" --rpc-url "$RPC" --async \
+                --nonce "$NONCE_ARB" \
+                >> "$logfile" 2>&1
+            NONCE_ARB=$((NONCE_ARB + 1))
+        fi
+
+        # Always poll the keeper. The concierge tolerates an empty queue, so spamming
+        # this is cheap and keeps the loop simple.
+        cast send "$CONCIERGE" "$EXEC_SIG" "$pool" 16 \
+            --private-key "$KEEPER_PK" --rpc-url "$RPC" --async \
+            --nonce "$NONCE_KEEPER" \
+            >> "$logfile" 2>&1
+        NONCE_KEEPER=$((NONCE_KEEPER + 1))
+    }
+
+    # ── Mint-test minter ────────────────────────────────────────────────────────
+    # Map a pool revert blob to a known reason string for tallying.
+    classify_revert() {
+        local out="$1" r
+        for r in "volatile market" "rate limited" "slippage control" \
+                 "insufficient funds" "deadline" "too small" "uninitialized"; do
+            if grep -qF "$r" <<<"$out"; then printf '%s' "$r"; return; fi
+        done
+        printf 'unknown'
+    }
+
+    # Submit the minter's basket mint LAST in the tick — after both advancers have
+    # already queued their arb (top-of-block MEV) and keeper txs — so anvil's FIFO
+    # mempool orders it at the BOTTOM of the next block, exactly where a mint that was
+    # submitted to the mempool between blocks lands: behind the block's arb and keeper.
+    # All three execute in the same block. We call the pool directly (not the concierge)
+    # with partialFillAllowed=false so a tripped gate surfaces as a status-0 revert we
+    # can classify, instead of being silently swallowed into the concierge queue.
+    run_minter_submit() {
+        local pool="$1" logfile="$2"
+        local n=${#OG_TOKENS[@]} zeros="[" i
+        for ((i = 0; i < n; i++)); do zeros+="0"; ((i < n - 1)) && zeros+=","; done
+        zeros+="]"
+
+        local out rc
+        # Explicit --gas-limit on purpose: the mint is EXPECTED to revert whenever the
+        # gate trips, and cast's default eth_estimateGas pre-flight would itself revert
+        # and abort the broadcast before the tx ever reaches the mempool. A fixed limit
+        # forces the tx out so it mines as an inspectable status-0 receipt.
+        out=$(cast send "$pool" "$POOL_MINT_SIG" \
+            "$MINTER_ADDR" "$APPROVAL_SELECTOR" "$MINTER_ADDR" "$MINT_LP_AMOUNT" "$zeros" 0 false 0 0x \
+            --private-key "$MINTER_PK" --rpc-url "$RPC" --async \
+            --nonce "$NONCE_MINTER" --gas-limit 3000000 2>&1)
+        rc=$?
+        echo "$out" >> "$logfile"
+        if [[ $rc -eq 0 ]]; then
+            MINTER_PENDING_TX=$(grep -oE '0x[0-9a-fA-F]{64}' <<<"$out" | head -1)
+            NONCE_MINTER=$((NONCE_MINTER + 1))
+        else
+            MINTER_PENDING_TX=""
+            MINT_OTHER=$((MINT_OTHER + 1))
+            echo "[mint-test] submit FAILED: ${out//$'\n'/ }"
+        fi
+    }
+
+    # Read the receipt of the mint submitted last tick (now mined in the block evm_mine
+    # just sealed, alongside that block's arb + keeper) and tally the outcome.
+    run_minter_collect() {
+        local logfile="$1"
+        [[ -z "$MINTER_PENDING_TX" ]] && return 0
+        local tx="$MINTER_PENDING_TX"; MINTER_PENDING_TX=""
+
+        local status blk reason trace
+        status=$(cast receipt "$tx" status --rpc-url "$RPC" 2>/dev/null)
+        blk=$(cast receipt "$tx" blockNumber --rpc-url "$RPC" 2>/dev/null)
+
+        if [[ -z "$blk" ]]; then
+            MINT_OTHER=$((MINT_OTHER + 1))
+            echo "tx=$tx result=NO_RECEIPT (not mined?)" >> "$logfile"
+            echo "[mint-test] tx=$tx NO RECEIPT"
+            return 0
+        fi
+
+        if grep -qiE '(^0x1$|^1$|true|success)' <<<"$status"; then
+            MINT_OK=$((MINT_OK + 1))
+            reason="SUCCESS"
+            echo "block=$blk tx=$tx result=SUCCESS lp=$MINT_LP_AMOUNT" >> "$logfile"
+        else
+            # `cast run` re-executes the tx in its block context (arb + keeper applied
+            # first), so its trace carries the real in-block revert reason. Classify by
+            # substring; if the trace is unavailable the reason falls through to "unknown"
+            # but we still know it reverted from the status.
+            trace=$(cast run "$tx" --rpc-url "$RPC" 2>&1)
+            reason=$(classify_revert "$trace")
+            if [[ "$reason" == "volatile market" ]]; then
+                MINT_VOLATILE=$((MINT_VOLATILE + 1))
+            else
+                MINT_OTHER=$((MINT_OTHER + 1))
+            fi
+            echo "block=$blk tx=$tx result=REVERT reason=\"$reason\"" >> "$logfile"
+        fi
+
+        local total=$((MINT_OK + MINT_VOLATILE + MINT_OTHER)) pct="n/a"
+        [[ $total -gt 0 ]] && pct=$(echo "scale=1; 100 * $MINT_VOLATILE / $total" | bc)
+        echo "[mint-test] block=$blk  ok=$MINT_OK volatile=$MINT_VOLATILE other=$MINT_OTHER  (volatile ${pct}% of $total)  -> $reason"
+    }
+
+    (
+        # Drop set -e for the loop body: a single failing cast/forge invocation should
+        # log and continue rather than tear down the simulator. Loop-internal failures
+        # tend to be transient (mempool contention, RPC blip) and self-correcting on the
+        # next tick.
+        set +e
+        # Loop forever; bin/mock's EXIT trap kills this process group.
+        while true; do
+            sleep "$BLOCK_TIME"
+
+            # Mine the block produced by last tick's [arb, keeper] + any user txs that
+            # accumulated during the wait window. FIFO mempool ordering means BA txs
+            # land first, user txs after.
+            cast rpc evm_mine --rpc-url "$RPC" >/dev/null 2>&1 || true
+
+            # The minter tx submitted last tick is now in the block just sealed — read
+            # its receipt before anything else touches the chain.
+            [[ "$MINT_TEST" == 1 ]] && run_minter_collect log/mint-test.txt
+
+            # Refresh from chain after mining so we pick up nonces advanced by user txs.
+            refresh_nonces
+
+            run_advancer og  "$OG_POOL"  "$STATE_DIR/og.json"  log/block-advancer-og.txt
+            run_advancer peg "$PEG_POOL" "$STATE_DIR/peg.json" log/block-advancer-peg.txt
+
+            # Minter goes LAST: arb (top-of-block MEV) first, keeper second, minter at
+            # the bottom of the block. All three land in the next block together.
+            [[ "$MINT_TEST" == 1 ]] && run_minter_submit "$OG_POOL" log/mint-test.txt
+        done
+    ) &
+    TICK_PID=$!
+fi
+
+echo "Press Ctrl+C to exit..."
+wait "$ANVIL_PID"

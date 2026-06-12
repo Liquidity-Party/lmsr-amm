@@ -1,0 +1,129 @@
+#!/bin/bash
+# bin/validate-token — pre-flight token validator for PartyPlanner.newPool listings.
+#
+# Usage:
+#   bin/validate-token <token-address> [--rpc <url>]
+#   bin/validate-token --help
+#
+# The default RPC is $ETHEREUM_RPC_URL.
+#
+# Runs the Foundry script `script/TokenValidator.s.sol` against a deployed token on the
+# given RPC. Exits non-zero if any probe returns FAIL (so the runner is suitable for
+# scripted/CI use). See `doc/security/token-validator-spec.md` and
+# `doc/security/trusted-deployer-policy.md` for the full vetting procedure.
+
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: bin/validate-token <token-address> [--rpc <url>]
+
+Arguments:
+  <token-address>   The deployed ERC-20 to validate (0x-prefixed).
+
+Options:
+  --rpc <url>       RPC endpoint to fork from. Defaults to $ETHEREUM_RPC_URL.
+  --help, -h        Show this message.
+
+Exit code:
+  0  Overall PASS (all probes returned PASS).
+  3  Overall WARN (no FAIL findings, but at least one WARN). Operator review required.
+  1  Overall FAIL (at least one FAIL finding). Token MUST NOT be listed.
+  2  Usage error.
+
+See doc/security/trusted-deployer-policy.md for the full vetting procedure.
+EOF
+}
+
+if [[ $# -eq 0 ]]; then
+  usage
+  exit 2
+fi
+
+TOKEN=""
+
+# Source .env from repo root if ETHEREUM_RPC_URL isn't already in the environment.
+SCRIPT_DIR_EARLY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -z "${ETHEREUM_RPC_URL:-}" && -f "$SCRIPT_DIR_EARLY/../.env" ]]; then
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR_EARLY/../.env"
+fi
+
+RPC="${ETHEREUM_RPC_URL:-}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --rpc)
+      RPC="$2"
+      shift 2
+      ;;
+    --rpc=*)
+      RPC="${1#--rpc=}"
+      shift
+      ;;
+    -*)
+      echo "validate-token: unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+    *)
+      if [[ -z "$TOKEN" ]]; then
+        TOKEN="$1"
+      else
+        echo "validate-token: unexpected argument: $1" >&2
+        usage >&2
+        exit 2
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$TOKEN" ]]; then
+  echo "validate-token: missing <token-address>" >&2
+  usage >&2
+  exit 2
+fi
+
+if [[ -z "$RPC" ]]; then
+  echo "validate-token: no RPC provided. Set \$ETHEREUM_RPC_URL or pass --rpc <url>." >&2
+  exit 2
+fi
+
+# Resolve to repo root so this script works from any cwd.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+cd "$REPO_ROOT"
+
+# Capture forge output so we can distinguish PASS / WARN / FAIL by parsing the
+# "Overall:" line. forge's own exit code is 0 on PASS or WARN and non-zero on FAIL
+# (the script reverts on FAIL); we need an extra bit to separate PASS from WARN.
+output_file="$(mktemp)"
+trap 'rm -f "$output_file"' EXIT
+
+set +e
+forge script script/TokenValidator.s.sol \
+    --sig 'run(address)' "$TOKEN" \
+    --fork-url "$RPC" \
+    --gas-limit 18446744073709551615 \
+    -vv 2>&1 | tee "$output_file"
+forge_status=${PIPESTATUS[0]}
+set -e
+
+if [[ $forge_status -ne 0 ]]; then
+  exit 1
+fi
+
+# forge exited 0 — distinguish PASS from WARN by parsing the report line.
+# `console2.log("Overall:", "WARN")` shows up in forge's `-vv` log section as
+# `  Overall: WARN`. Match the substring anywhere on the line to be robust to
+# forge's indentation / color codes.
+if grep -qE 'Overall:[[:space:]]+WARN' "$output_file"; then
+  exit 3
+fi
+exit 0

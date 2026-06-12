@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="645" viewBox="0 0 672 258" font-family="Arial, sans-serif">
+  <defs>
+    <marker id="ah" viewBox="0 0 8 6" refX="8" refY="3"
+      markerWidth="4" markerHeight="3" orient="auto">
+      <path d="M0.5,0.5 L7,3 L0.5,5.5" fill="none" stroke="#94A3B8"
+        stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    </marker>
+    <filter id="shadow" x="-6%" y="-8%" width="112%" height="128%">
+      <feDropShadow dx="0" dy="0.5" stdDeviation="0.8"
+        flood-color="#000" flood-opacity="0.05"/>
+    </filter>
+  </defs>
+  <rect width="672" height="258" fill="#F8F9FB" rx="3"/>
+  <text x="336" y="11" text-anchor="middle" font-size="6" font-weight="700" fill="#1E293B">Liquidity Party Architecture</text>
+  <rect x="261" y="16" width="150" height="10" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.4"/>
+  <rect x="266" y="18.5" width="5" height="5" rx="2.5" fill="#fff" stroke="#E2E5EA" stroke-width="0.4"/>
+  <text x="274" y="22.5" font-size="3.5" fill="#1E293B">Actor</text>
+  <rect x="306" y="18.5" width="5" height="5" rx="1.5" fill="#fff" stroke="#E2E5EA" stroke-width="0.4"/>
+  <rect x="307" y="19.5" width="0.8" height="3" rx="0.4" fill="#3B82F6"/>
+  <text x="314" y="22.5" font-size="3.5" fill="#1E293B">Protocol</text>
+  <rect x="354" y="18.5" width="5" height="5" rx="1.5" fill="#fff" stroke="#E2E5EA" stroke-width="0.4"/>
+  <rect x="355" y="19.5" width="0.8" height="3" rx="0.4" fill="#F59E0B"/>
+  <text x="362" y="22.5" font-size="3.5" fill="#1E293B">External</text>
+  <path d="M68.8,46.0 C68.8,70.0 106.2,70.0 106.2,94.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M68.8,46.0 Q159.8,104.0 156.9,94.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M156.9,94.0 Q171.2,104.0 244.9,156.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M164.8,46.0 C164.8,70.0 106.2,70.0 106.2,94.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M270.4,46.0 C270.4,70.0 225.6,70.0 225.6,94.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M270.4,46.0 Q280.0,104.0 257.7,94.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M257.7,94.0 Q276.0,104.0 244.9,156.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M106.2,114.0 C106.2,135.0 244.9,135.0 244.9,156.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M149.8,112.0 C191.9,134.0 247.9,134.0 290.0,114.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M225.6,114.0 C225.6,135.0 244.9,135.0 244.9,156.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M323.4,114.0 C323.4,135.0 244.9,135.0 244.9,156.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M244.9,176.0 C244.9,197.0 164.4,197.0 164.4,218.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M244.9,176.0 C244.9,197.0 279.6,197.0 279.6,218.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M244.9,176.0 C244.9,197.0 390.0,197.0 390.0,218.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M244.9,176.0 C244.9,197.0 500.4,197.0 500.4,218.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M244.9,176.0 C244.9,197.0 603.6,197.0 603.6,218.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M215.2,236.0 C221.8,254.0 230.6,254.0 237.2,238.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <g filter="url(#shadow)">
+    <rect x="30.0" y="32.0" width="77.6" height="14" rx="7" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <text x="68.8" y="40.8" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">LP / Swapper</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="129.6" y="32.0" width="70.4" height="14" rx="7" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <text x="164.8" y="40.8" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Keeper</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="222.0" y="32.0" width="96.8" height="14" rx="7" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <text x="270.4" y="40.8" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Owner / Guardian</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="62.6" y="94.0" width="87.2" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="65.6" y="97.0" width="1.4" height="14" rx="0.6" fill="#3B82F6"/>
+    <text x="106.2" y="103.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">PartyConcierge</text>
+    <text x="106.2" y="108.5" text-anchor="middle" font-size="3.5" fill="#64748B">Router + Queue</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="290.0" y="94.0" width="66.8" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="293.0" y="97.0" width="1.4" height="14" rx="0.6" fill="#3B82F6"/>
+    <text x="323.4" y="103.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">PartyInfo</text>
+    <text x="323.4" y="108.5" text-anchor="middle" font-size="3.5" fill="#64748B">Quoter (view)</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="183.2" y="94.0" width="84.8" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="186.2" y="97.0" width="1.4" height="14" rx="0.6" fill="#3B82F6"/>
+    <text x="225.6" y="103.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">PartyPlanner</text>
+    <text x="225.6" y="108.5" text-anchor="middle" font-size="3.5" fill="#64748B">Factory / Registry</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="200.7" y="156.0" width="88.4" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="203.7" y="159.0" width="1.4" height="14" rx="0.6" fill="#3B82F6"/>
+    <text x="244.9" y="165.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">PartyPool</text>
+    <text x="244.9" y="170.5" text-anchor="middle" font-size="3.5" fill="#64748B">LMSR AMM + LP ERC20</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="113.6" y="218.0" width="101.6" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="116.6" y="221.0" width="1.4" height="14" rx="0.6" fill="#3B82F6"/>
+    <text x="164.4" y="227.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Pool Op Libraries</text>
+    <text x="164.4" y="232.5" text-anchor="middle" font-size="3.5" fill="#64748B">ExtraImpl1/2 / Helpers</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="237.2" y="218.0" width="84.8" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="240.2" y="221.0" width="1.4" height="14" rx="0.6" fill="#3B82F6"/>
+    <text x="279.6" y="227.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">LMSRKernel</text>
+    <text x="279.6" y="232.5" text-anchor="middle" font-size="3.5" fill="#64748B">Cost-function math</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="344.0" y="218.0" width="92.0" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="347.0" y="221.0" width="1.4" height="14" rx="0.6" fill="#3B82F6"/>
+    <text x="390.0" y="227.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">BFStore</text>
+    <text x="390.0" y="232.5" text-anchor="middle" font-size="3.5" fill="#64748B">bases+fees (SSTORE2)</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="458.0" y="218.0" width="84.8" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="461.0" y="221.0" width="1.4" height="14" rx="0.6" fill="#F59E0B"/>
+    <text x="500.4" y="227.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Permit2</text>
+    <text x="500.4" y="232.5" text-anchor="middle" font-size="3.5" fill="#64748B">Signature transfer</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="564.8" y="218.0" width="77.6" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="567.8" y="221.0" width="1.4" height="14" rx="0.6" fill="#F59E0B"/>
+    <text x="603.6" y="227.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">ERC20 / WETH</text>
+    <text x="603.6" y="232.5" text-anchor="middle" font-size="3.5" fill="#64748B">Basket + wrapper</text>
+  </g>
+  <rect x="63.9" y="65.0" width="47.2" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="87.5" y="70.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">swap / mint / burn</text>
+  <rect x="184.5" y="120.0" width="32.8" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="200.9" y="125.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">direct calls</text>
+  <rect x="119.1" y="65.0" width="32.8" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="135.5" y="70.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">executeMints</text>
+  <rect x="237.6" y="65.0" width="20.8" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="248.0" y="70.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">newPool</text>
+  <rect x="243.4" y="116.0" width="44.8" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="265.8" y="121.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">kill / setFeeAddr</text>
+  <rect x="161.6" y="130.0" width="28.0" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="175.6" y="135.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">routed ops</text>
+  <rect x="203.5" y="133.0" width="32.8" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="219.9" y="138.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">reads quotes</text>
+  <rect x="232.4" y="126.0" width="37.6" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="251.2" y="131.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">CREATE2 deploy</text>
+  <rect x="268.9" y="134.0" width="30.4" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="284.1" y="139.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">reads state</text>
+  <rect x="188.2" y="192.0" width="32.8" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="204.6" y="197.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">delegatecall</text>
+  <rect x="251.8" y="192.0" width="20.8" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="262.2" y="197.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">pricing</text>
+  <rect x="302.2" y="192.0" width="30.4" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="317.4" y="197.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">extcodecopy</text>
+  <rect x="358.6" y="192.0" width="28.0" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="372.6" y="197.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">pull funds</text>
+  <rect x="404.2" y="192.0" width="40.0" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="424.2" y="197.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">transfer / wrap</text>
+  <rect x="212.2" y="253.0" width="28.0" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="226.2" y="258.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">quote math</text>
+</svg>

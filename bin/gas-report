@@ -1,0 +1,143 @@
+#!/bin/bash
+
+# Ensure Permit2.sol artifact exists (needed by GasTest setUp)
+forge build --quiet
+
+FMT="%-22s %10s %10s %10s %10s %10s\n"
+SEP="                           ──────  ─────────  ─────────  ─────────  ─────────"
+
+# Single-run report: used for rows that have all 5 ops (Pair) or have no full-group companion.
+report() {
+  local name=${2:-$1}
+  REPORT=$(forge test --mc GasTest --mt "$1" --gas-report)
+  SWAP=$(echo "$REPORT" | grep 'swapApproval ' | cut -d '|' -f 5 | xargs)
+  if [ -z "$SWAP" ]; then
+    SWAP=$(echo "$REPORT" | grep 'swapPrefund ' | cut -d '|' -f 5 | xargs)
+  fi
+  if [ -z "$SWAP" ]; then
+    SWAP=$(echo "$REPORT" | grep 'swapCallback ' | cut -d '|' -f 5 | xargs)
+  fi
+  if [ -z "$SWAP" ]; then
+    SWAP=$(echo "$REPORT" | grep 'swapPermit2 ' | cut -d '|' -f 5 | xargs)
+  fi
+  MINT=$(echo "$REPORT" | grep 'mint ' | cut -d '|' -f 5 | xargs)
+  BURN=$(echo "$REPORT" | grep 'burn ' | cut -d '|' -f 5 | xargs)
+  SWAPMINT=$(echo "$REPORT" | grep 'swapMint ' | cut -d '|' -f 5 | xargs)
+  BURNSWAP=$(echo "$REPORT" | grep 'burnSwap ' | cut -d '|' -f 5 | xargs)
+  # shellcheck disable=SC2059
+  printf "$FMT" "$name" "$SWAP" "$MINT" "$BURN" "$SWAPMINT" "$BURNSWAP"
+}
+
+# Four-row group: prefund row gets swap from prefund test + mint/burn/swapMint/burnSwap from
+# the approval test (which runs all group tests); callback/approval/permit2 rows show swap only.
+reportGroup() {
+  local prefundFilter="$1" callbackFilter="$2" approvalFilter="$3" permit2Filter="$4"
+  local pName="$5" cbName="$6" aName="$7" p2Name="$8"
+
+  local PR CB AR P2R SWAP MINT BURN SWAPMINT BURNSWAP
+  PR=$(forge test --mc GasTest --mt "$prefundFilter"  --gas-report)
+  CB=$(forge test --mc GasTest --mt "$callbackFilter" --gas-report)
+  AR=$(forge test --mc GasTest --mt "$approvalFilter" --gas-report)
+  P2R=$(forge test --mc GasTest --mt "$permit2Filter" --gas-report)
+
+  SWAP=$(echo "$PR"  | grep 'swapPrefund '  | cut -d '|' -f 5 | xargs)
+  MINT=$(echo "$AR"  | grep 'mint '         | cut -d '|' -f 5 | xargs)
+  BURN=$(echo "$AR"  | grep 'burn '         | cut -d '|' -f 5 | xargs)
+  SWAPMINT=$(echo "$AR" | grep 'swapMint '  | cut -d '|' -f 5 | xargs)
+  BURNSWAP=$(echo "$AR" | grep 'burnSwap '  | cut -d '|' -f 5 | xargs)
+  # shellcheck disable=SC2059
+  printf "$FMT" "$pName" "$SWAP" "$MINT" "$BURN" "$SWAPMINT" "$BURNSWAP"
+
+  SWAP=$(echo "$CB"  | grep 'swapCallback ' | cut -d '|' -f 5 | xargs)
+  # shellcheck disable=SC2059
+  printf "$FMT" "$cbName" "$SWAP"
+
+  SWAP=$(echo "$AR"  | grep 'swapApproval ' | cut -d '|' -f 5 | xargs)
+  # shellcheck disable=SC2059
+  printf "$FMT" "$aName" "$SWAP"
+
+  SWAP=$(echo "$P2R" | grep 'swapPermit2 '  | cut -d '|' -f 5 | xargs)
+  # shellcheck disable=SC2059
+  printf "$FMT" "$p2Name" "$SWAP"
+}
+
+# Extract median gas for a named function within the PartyConcierge contract block
+concierge_median() {
+  local report="$1" fn="$2"
+  echo "$report" | awk -v fn="$fn" '
+    /PartyConcierge [Cc]ontract/ { in_block=1; next }
+    in_block && / [Cc]ontract /  { in_block=0 }
+    in_block && $0 ~ ("\\| " fn " ") {
+      n = split($0, a, "|")
+      gsub(/ /, "", a[5])
+      print a[5]
+      exit
+    }
+  '
+}
+
+reportConcierge() {
+  local name=${2:-$1}
+  local RESULT
+  RESULT=$(forge test --mc ConciergeBenchTest --mt "$1" --gas-report 2>/dev/null)
+  SWAP=$(concierge_median "$RESULT" "swap")
+  MINT=$(concierge_median "$RESULT" "mint")
+  BURN=$(concierge_median "$RESULT" "burn")
+  SWAPMINT=$(concierge_median "$RESULT" "swapMint")
+  BURNSWAP=$(concierge_median "$RESULT" "burnSwap")
+  # shellcheck disable=SC2059
+  printf "$FMT" "$name" "$SWAP" "$MINT" "$BURN" "$SWAPMINT" "$BURNSWAP"
+}
+
+reportConciergePermit2() {
+  local name=${2:-$1}
+  local RESULT
+  RESULT=$(forge test --mc ConciergeBenchTest --mt "$1" --gas-report 2>/dev/null)
+  SWAP=$(concierge_median "$RESULT" "swapPermit2")
+  # shellcheck disable=SC2059
+  printf "$FMT" "$name" "$SWAP"
+}
+
+# Median gas of the keeper's executeMints call for a single benchmark test (count=1 → median is that call).
+keeper_gas() {
+  local RESULT
+  RESULT=$(forge test --mc ConciergeBenchTest --mt "$1" --gas-report 2>/dev/null)
+  concierge_median "$RESULT" "executeMints"
+}
+
+# Print header
+# shellcheck disable=SC2059
+printf "$FMT" "" "swap" "mint" "burn" "swapMint" "burnSwap"
+printf "%s\n" "$SEP"
+
+report    GasPair "Pair approval"
+reportGroup Prefunding10 Callback10 Ten    Permit210 "Ten prefund"    "Ten callback"    "Ten approval"    "Ten Permit2"
+reportGroup Prefunding20 Callback20 Twenty Permit220 "Twenty prefund" "Twenty callback" "Twenty approval" "Twenty Permit2"
+reportGroup Prefunding30 Callback30 Thirty Permit230 "Thirty prefund" "Thirty callback" "Thirty approval" "Thirty Permit2"
+reportGroup Prefunding50 Callback50 Fifty  Permit250 "Fifty prefund"  "Fifty callback"  "Fifty approval"  "Fifty Permit2"
+
+echo ""
+# shellcheck disable=SC2059
+printf "$FMT" "" "swap" "mint" "burn" "swapMint" "burnSwap"
+printf "%s\n" "$SEP"
+reportConcierge        testConciergePair          "Conc Pair approval"
+reportConciergePermit2 testConciergePairPermit2   "Conc Pair Permit2"
+reportConcierge        testConciergeTen           "Conc Ten approval"
+reportConciergePermit2 testConciergeTenPermit2    "Conc Ten Permit2"
+reportConcierge        testConciergeTwenty        "Conc Twenty approval"
+reportConciergePermit2 testConciergeTwentyPermit2 "Conc Twenty Permit2"
+reportConcierge        testConciergeThirty        "Conc Thirty approval"
+reportConciergePermit2 testConciergeThirtyPermit2 "Conc Thirty Permit2"
+reportConcierge        testConciergeFifty         "Conc Fifty approval"
+reportConciergePermit2 testConciergeFiftyPermit2  "Conc Fifty Permit2"
+
+# Keeper executeMints gas with exactly one small mint request queued, by pool size.
+echo ""
+# shellcheck disable=SC2059
+printf "$FMT" "keeper 1 mint" "10" "20" "30" "" ""
+printf "%s\n" "$SEP"
+K10=$(keeper_gas testConciergeKeeperTen)
+K20=$(keeper_gas testConciergeKeeperTwenty)
+K30=$(keeper_gas testConciergeKeeperThirty)
+# shellcheck disable=SC2059
+printf "$FMT" "executeMints gas" "$K10" "$K20" "$K30" "" ""

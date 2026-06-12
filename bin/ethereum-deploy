@@ -1,0 +1,171 @@
+#!/bin/bash
+
+CHAINID=1
+DEPLOY_SCRIPT=DeployEthereum
+
+if [ -f ".env" ]; then
+  echo "Reading environment from .env"
+  set -a
+  source .env
+  set +a
+fi
+
+if [ -z "$ETHEREUM_RPC_URL" ]; then
+  echo "Usage: ETHEREUM_RPC_URL environment variable must be set"
+  exit 1
+fi
+RPC=${ETHEREUM_RPC_URL}
+
+if [ -z "$ETHERSCAN_API_KEY" ]; then
+  echo "Usage: ETHERSCAN_API_KEY environment variable must be set"
+  exit 1
+fi
+
+if [ "$1" == "broadcast" ]; then
+  # use the #0 account which is the admin
+  BROADCAST=(--broadcast --verify --etherscan-api-key "$ETHERSCAN_API_KEY")
+else
+  BROADCAST=()
+fi
+
+
+if [ "$1" != "record" ]; then
+  forge clean
+  echo 'Connect your Trezor to continue...'
+  TEMP_FILE=forge_script_tmp_output.txt
+  forge script --fork-url "$RPC" --trezor --mnemonic-indexes 0 --mnemonic-indexes 0 --slow "${BROADCAST[@]}" "$DEPLOY_SCRIPT" |& tee $TEMP_FILE
+  SUCCESS=${PIPESTATUS[0]}
+  rm $TEMP_FILE
+  if [ $SUCCESS -ne 0 ]; then
+    echo "Deployment failed."
+    exit 1
+  fi
+  echo "Deployment successful!"
+fi
+
+# Update the liqp-deployments.json file if the contracts were broadcast or record was requested
+
+if [ "$1" == "broadcast" ] || [ "$1" == "record" ]; then
+  METADATA_FILE=deployment/liqp-deployments.json
+  BROADCAST_FILE=broadcast/${DEPLOY_SCRIPT}.sol/${CHAINID}/run-latest.json
+else
+  METADATA_FILE=./liqp-deployments.json
+  BROADCAST_FILE=broadcast/${DEPLOY_SCRIPT}.sol/${CHAINID}/dry-run/run-latest.json
+fi
+
+address() {
+  if [ -z "$1" ]; then
+    echo ""
+  else
+    cast --to-checksum-address "$1"
+  fi
+}
+
+contract() {
+  address "$(jq -r ".transactions[] | select(.contractName == \"$1\" and .transactionType == \"CREATE\") | .contractAddress" $BROADCAST_FILE)"
+}
+
+library() {
+  address "$(jq -r ".libraries[] | select(test(\":$1:\")) | split(\":\")[2]" $BROADCAST_FILE)"
+}
+
+if [ "$1" == "broadcast" ] || [ "$1" == "record" ]; then
+  PARTY_POOL_EXTRA_IMPL1=$(library PartyPoolExtraImpl1)
+  PARTY_POOL_EXTRA_IMPL2=$(library PartyPoolExtraImpl2)
+  PARTY_CONCIERGE_EXTRA_IMPL=$(library PartyConciergeExtraImpl)
+  PARTY_INFO=$(contract PartyInfo)
+  PARTY_POOL_INIT_CODE=$(contract PartyPoolInitCode)
+  PARTY_PLANNER=$(contract PartyPlanner)
+  PARTY_CONCIERGE=$(contract PartyConcierge)
+  # Permit2 is not deployed by us — it lives at its canonical address on every chain
+  # (see DeployEthereum.sol's PERMIT2 constant). Record it alongside our contracts so
+  # downstream tooling can resolve it from the manifest.
+  PERMIT2=0x000000000022D473030F116dDEE9F6B43aC78BA3
+  # WrapperToken is the canonical WETH on mainnet (see DeployEthereum.sol's WETH constant),
+  # passed into PartyPlanner rather than deployed by us. Record it for downstream tooling.
+  WRAPPER_TOKEN=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+
+  OUT=deployment/$CHAINID/v1
+  git rm -rf $OUT > /dev/null 2>&1
+  mkdir -p $OUT
+  cp -r out $OUT/ > /dev/null 2>&1
+  git add $OUT/out > /dev/null 2>&1
+  echo Copied out to $OUT/
+
+  # Build and insert the JSON object directly in jq
+  jq -n \
+    --arg chainId "$CHAINID" \
+    --arg partyPlanner "$PARTY_PLANNER" \
+    --arg partyInfo "$PARTY_INFO" \
+    --arg partyPoolExtraImpl1 "$PARTY_POOL_EXTRA_IMPL1" \
+    --arg partyPoolExtraImpl2 "$PARTY_POOL_EXTRA_IMPL2" \
+    --arg partyConciergeExtraImpl "$PARTY_CONCIERGE_EXTRA_IMPL" \
+    --arg partyPoolInitCode "$PARTY_POOL_INIT_CODE" \
+    --arg partyConcierge "$PARTY_CONCIERGE" \
+    --arg permit2 "$PERMIT2" \
+    --arg wrapperToken "$WRAPPER_TOKEN" \
+    '
+    {
+      v1: {
+        PartyPlanner: $partyPlanner,
+        PartyInfo: $partyInfo,
+        PartyPoolExtraImpl1: $partyPoolExtraImpl1,
+        PartyPoolExtraImpl2: $partyPoolExtraImpl2,
+        PartyConciergeExtraImpl: $partyConciergeExtraImpl,
+        PartyPoolInitCode: $partyPoolInitCode,
+        PartyConcierge: $partyConcierge,
+        Permit2: $permit2,
+        WrapperToken: $wrapperToken
+      }
+    } as $entry |
+    (try (input | . + {($chainId): $entry}) catch {($chainId): $entry})
+    ' "$METADATA_FILE" 2>/dev/null > "${METADATA_FILE}.tmp" && mv "${METADATA_FILE}.tmp" "$METADATA_FILE" || \
+    jq -n \
+      --arg chainId "$CHAINID" \
+      --arg partyPlanner "$PARTY_PLANNER" \
+      --arg partyInfo "$PARTY_INFO" \
+      --arg partyPoolExtraImpl1 "$PARTY_POOL_EXTRA_IMPL1" \
+      --arg partyPoolExtraImpl2 "$PARTY_POOL_EXTRA_IMPL2" \
+      --arg partyConciergeExtraImpl "$PARTY_CONCIERGE_EXTRA_IMPL" \
+      --arg partyPoolInitCode "$PARTY_POOL_INIT_CODE" \
+      --arg partyConcierge "$PARTY_CONCIERGE" \
+      --arg permit2 "$PERMIT2" \
+      --arg wrapperToken "$WRAPPER_TOKEN" \
+      '{($chainId): {
+        v1: {
+          PartyPlanner: $partyPlanner,
+          PartyInfo: $partyInfo,
+          PartyPoolExtraImpl1: $partyPoolExtraImpl1,
+          PartyPoolExtraImpl2: $partyPoolExtraImpl2,
+          PartyConciergeExtraImpl: $partyConciergeExtraImpl,
+          PartyPoolInitCode: $partyPoolInitCode,
+          PartyConcierge: $partyConcierge,
+          Permit2: $permit2,
+          WrapperToken: $wrapperToken
+        }
+      }}' > "$METADATA_FILE"
+
+  echo "Wrote $METADATA_FILE"
+
+  if [ "$1" == "broadcast" ]; then
+    echo "Verifying contracts on Sourcify..."
+    SOURCIFY_FAILED=0
+    while IFS=$'\t' read -r addr name; do
+      echo "  Verifying $name ($addr)..."
+      forge verify-contract "$addr" "$name" \
+        --verifier sourcify \
+        --chain-id "$CHAINID" || { echo "  WARNING: Sourcify verification failed for $name"; SOURCIFY_FAILED=1; }
+    done < <(jq -r '.transactions[] | select(.transactionType == "CREATE") | [.contractAddress, .contractName] | @tsv' "$BROADCAST_FILE")
+    while IFS=$'\t' read -r addr name; do
+      echo "  Verifying library $name ($addr)..."
+      forge verify-contract "$addr" "$name" \
+        --verifier sourcify \
+        --chain-id "$CHAINID" || { echo "  WARNING: Sourcify verification failed for library $name"; SOURCIFY_FAILED=1; }
+    done < <(jq -r '.libraries[] | split(":") | [.[2], .[1]] | @tsv' "$BROADCAST_FILE")
+    if [ $SOURCIFY_FAILED -ne 0 ]; then
+      echo "Sourcify verification failed for one or more contracts."
+      exit 1
+    fi
+    echo "All Sourcify verifications succeeded."
+  fi
+fi

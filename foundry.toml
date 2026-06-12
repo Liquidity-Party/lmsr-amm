@@ -1,0 +1,30 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+remappings = [
+    '@openzeppelin/=lib/openzeppelin-contracts/',
+    '@abdk/=lib/abdk-libraries-solidity/',
+    'solmate/=lib/permit2/lib/solmate/',
+    'permit2/=lib/permit2/src/',
+]
+optimizer=true
+optimizer_runs=15000 # 15000 is the maximum that keeps PartyPoolInitCode under EIP-170 (24576 bytes)
+viaIR=true
+# Bumped from the foundry default (2^30 ≈ 1.07e9) so the long-horizon attack-ramp
+# tests (e.g. OGSandwichAttack W=200, ~13M gas per ramp block × 200 blocks) fit
+# in a single test transaction. 9.22e18 = max i64, effectively unlimited per
+# test — the EVM block_gas_limit (30M per call frame) is still enforced.
+gas_limit = 9223372036854775807
+ignored_warnings_from = ["lib"]
+ignored_error_codes = [4591]  # solc "more than 256 warnings" meta-warning; raised by lib noise before path filter runs
+gas_reports = ['PartyPool', 'PartyPlanner', 'GasHarness', 'PartyConcierge']
+fs_permissions = [
+    { access = "write", path = "metadata.json"}, # webapp MetadataJson written by DeployMock
+    { access = "read", path = "deployment/liqp-deployments.json"}, # production deployments
+    { access = "read", path = "out/"}, # for vm.etch of compiled contracts in tests
+    { access = "read-write", path = "state/"}, # block-advancer persistent off-chain price state
+]
+
+[lint]
+lint_on_build=false  # more annoying than helpful

@@ -1,0 +1,97 @@
+#!/bin/bash
+# Reads internal/token-candidates.csv and runs bin/validate-token on each entry.
+# Results are cached in .validate-cache/ by token address so re-runs skip
+# already-validated tokens. Pass --clear-cache to force re-validation.
+# Prints per-token progress to stderr, then PASS/WARN/FAIL/TIMEOUT groupings to stdout.
+#
+# Status categories:
+#   PASS    — every probe returned PASS
+#   WARN    — no FAIL findings, but at least one WARN (operator must review)
+#   FAIL    — at least one FAIL finding; token must not be listed
+#   TIMEOUT — validation exceeded the per-token wall-clock budget
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+CSV="$REPO_ROOT/internal/token-candidates.csv"
+CACHE_DIR="$REPO_ROOT/.validate-cache"
+
+# Ensure child processes (forge) inherit the RPC URL even if the caller didn't export it.
+export ETHEREUM_RPC_URL="${ETHEREUM_RPC_URL:-}"
+
+if [[ "${1:-}" == "--clear-cache" ]]; then
+  rm -rf "$CACHE_DIR"
+  echo "Cache cleared." >&2
+fi
+
+mkdir -p "$CACHE_DIR"
+
+trap 'echo "" >&2; echo "Interrupted." >&2; exit 130' INT TERM
+
+passed=()
+warned=()
+failed=()
+timed_out=()
+
+total=$(grep -c -v '^symbol,' "$CSV" | tr -d ' ')
+
+index=0
+while IFS=, read -r symbol address; do
+  [[ "$symbol" == "symbol" ]] && continue  # skip header
+  [[ -z "$symbol" || -z "$address" ]] && continue
+
+  index=$((index + 1))
+  cache_file="$CACHE_DIR/${address,,}"  # lowercase address as filename
+
+  if [[ -f "$cache_file" ]]; then
+    result=$(cat "$cache_file")
+    printf '[%d/%d] %-12s %s ... %s (cached)\n' "$index" "$total" "$symbol" "$address" "$result" >&2
+  else
+    printf '[%d/%d] %-12s %s ... ' "$index" "$total" "$symbol" "$address" >&2
+    start=$SECONDS
+    timeout 120 "$SCRIPT_DIR/validate-token" "$address" > /dev/null 2>&1
+    exit_code=$?
+    elapsed=$((SECONDS - start))
+    case "$exit_code" in
+      0)   result="PASS" ;;
+      3)   result="WARN" ;;
+      124) result="TIMEOUT" ;;
+      *)   result="FAIL" ;;
+    esac
+    printf '%s (%ds)\n' "$result" "$elapsed" >&2
+    echo "$result" > "$cache_file"
+  fi
+
+  case "$result" in
+    PASS)    passed+=("$symbol") ;;
+    WARN)    warned+=("$symbol") ;;
+    TIMEOUT) timed_out+=("$symbol") ;;
+    *)       failed+=("$symbol") ;;
+  esac
+done < "$CSV"
+
+echo "" >&2
+
+echo "== Failed Tokens =="
+for s in "${failed[@]+"${failed[@]}"}"; do
+  echo "$s"
+done
+
+echo ""
+echo "== Timed-out Tokens =="
+for s in "${timed_out[@]+"${timed_out[@]}"}"; do
+  echo "$s"
+done
+
+echo ""
+echo "== WARN Tokens =="
+for s in "${warned[@]+"${warned[@]}"}"; do
+  echo "$s"
+done
+
+echo ""
+echo "== Passed Tokens =="
+for s in "${passed[@]+"${passed[@]}"}"; do
+  echo "$s"
+done
